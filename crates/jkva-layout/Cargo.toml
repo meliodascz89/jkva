@@ -12,3 +12,5 @@ authors.workspace = true
 workspace = true
 
 [dependencies]
+jkva-core = { version = "0.0.0", path = "../jkva-core" }
+jkva-dom = { version = "0.0.0", path = "../jkva-dom" }
