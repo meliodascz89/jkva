@@ -13,6 +13,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - `tools/reftest-diff`: deterministic pixel diff for reference tests, with diff image output.
 - `tools/wpt-report`: Web Platform Tests pass-rate summary and CI gate.
 - `jkva-core`: generational arena with typed, opaque ids and stale-handle detection.
+- `jkva-style`: CSS parser, structural selector model, L4 specificity and structured warnings (at-rule contents, nesting and `var()` are not implemented yet).
 - `jkva-dom`: arena document tree with an html5ever 0.40 `TreeSink`: implied structure, entities, foster parenting, templates, quirks mode and parse diagnostics.
 - `jkva-gfx`: Metal 4 device probe, offscreen clear render and GPU readback (`Image`), plus the `gfx-clear` PNG probe.
 - The decision record: 99 answered questions and 25 ADRs.
