@@ -7,6 +7,7 @@
 - [Building](en/building.md)
 - [Performance baseline](en/performance.md)
 - [Web Platform Tests](en/wpt.md)
+- [Milestone status](en/status.md)
 - [Tools](en/tools.md)
 - [Contributing](en/contributing.md)
 
@@ -17,5 +18,6 @@
 - [Sestavení](cs/building.md)
 - [Výkonnostní baseline](cs/performance.md)
 - [Web Platform Tests](cs/wpt.md)
+- [Stav milníků](cs/status.md)
 - [Nástroje](cs/tools.md)
 - [Přispívání](cs/contributing.md)

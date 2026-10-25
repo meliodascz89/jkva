@@ -5,6 +5,7 @@ JKva je Cargo workspace s jednou cratí na vrstvu. Závislosti ukazují jen dol�
 | Crate | Vlastní |
 |---|---|
 | `jkva-core` | identifikátory, areny, plánovací primitiva, diagnostiku |
+| `jkva-ipc` | verzované zprávy s délkou mezi browser, renderer, GPU a síťovým procesem |
 | `jkva-platform` | Metalové zařízení, QoS vláken, signposty, schránku, soubory |
 | `jkva-net` | HTTP/1.1, HTTP/2, HTTP/3, TLS, cache, cookies |
 | `jkva-dom` | HTML strom, eventy, shadow roots |
