@@ -2,14 +2,14 @@
 //!
 //! # How a style is computed
 //!
-//! 1. Every declaration of every matching selector becomes a *candidate*, tagged
-//!    with the sort key the CSS cascade prescribes:
-//!    `(important, specificity, source order)`.
+//! 1. The rule index narrows the selectors worth testing for an element (see
+//!    [the rule index](#the-rule-index)), and every declaration of every
+//!    selector that does match becomes a *candidate*, tagged with the sort key
+//!    the CSS cascade prescribes: `(origin, specificity, source order)`.
 //! 2. Candidates are sorted by that key and applied in ascending order, so the
-//!    last writer wins. Later source order therefore beats earlier source order,
-//!    a more specific selector beats a less specific one, and `!important` beats
-//!    everything in the same origin. Only the author origin exists here, so there
-//!    is no origin ordering to apply.
+//!    last writer wins. Origin outranks specificity, specificity outranks source
+//!    order, and only four of the eight CSS origin/importance ranks exist (no
+//!    user origin, no animations, no transitions).
 //! 3. `margin`, `padding`, `border-width`, `border-style` and `border` shorthands are
 //!    expanded into their longhands
 //!    before the winner is chosen, so `margin: 1px` and `margin-top: 2px` compete
@@ -27,24 +27,41 @@
 //! * Values stay as specified-value text (see [`ComputedStyle`]); only `display`
 //!   is validated and parsed into [`DisplayType`]. An unrecognised `display`
 //!   keyword drops that declaration, as a browser would.
-//! * The reported initial values are the CSS ones with two approximations:
-//!   `color` starts as `black` (system colours are not implemented) and
-//!   `font-family` starts empty, meaning "user-agent default".
-//! * **There is no user-agent stylesheet.** A `<div>` therefore computes to
-//!   `display: inline`, not `block`, and `<head>`/`<title>` are not hidden. Every
-//!   expectation about default rendering has to come from an author stylesheet
-//!   until the UA sheet lands.
+//! * The reported initial values are the CSS ones with three approximations:
+//!   `color` starts as `black` (system colours are not implemented),
+//!   `font-family` starts empty, meaning "user-agent default", and `font-size`
+//!   starts at `16px`, which is what the keyword `medium` computes to.
 //! * `var()` is never substituted. A declaration such as `color: var(--brand)`
 //!   computes to the literal text `var(--brand)`, because custom properties are
 //!   parsed but not resolved.
-//! * Shorthands are expanded for `margin`, `padding` and the border shorthands. `background`,
-//!   `font`, `border` and friends are ignored entirely, so `background: red` does
-//!   **not** set `background-color`.
+//! * Shorthands are expanded for `margin`, `padding` and the border shorthands.
+//!   `background`, `font` and friends are ignored entirely, so `background: red`
+//!   does **not** set `background-color`.
 //! * Declarations for properties outside the tracked set are dropped, including
 //!   `list-style`, `position`, `text-align` and every other property the engine
 //!   does not model yet.
-//! * Matching is a linear scan over all rules for every element: there is no rule
-//!   index, no style sharing and no invalidation yet.
+//! * There is no style sharing and no incremental restyle: every
+//!   [`StyleEngine::compute_styles`] pass recomputes every element.
+//!
+//! # The rule index
+//!
+//! Every selector is filed under the most selective simple selector of its
+//! **rightmost** compound selector: an `#id` bucket, a `.class` bucket, a type
+//! bucket, or the *universal* bucket. For one element the cascade therefore tests
+//! its id bucket, its class buckets, its type bucket and the universal bucket,
+//! instead of every rule in the engine.
+//!
+//! Bucketing is only a filter; [`matches`] stays authoritative, so a bucket may
+//! over-approximate but must never under-approximate. That is why a compound such
+//! as `p:hover` or `div[data-x]` is still filed under bucket `p`/`div` — the
+//! pseudo-class and attribute are re-tested by the matcher — while a compound with
+//! nothing indexable (`.a:hover` is indexed by class, but `:first-child` alone,
+//! `[data-x]` alone, `*` or a namespace-qualified type) falls into the universal
+//! bucket and is tested for every element.
+//!
+//! Bucket order is irrelevant to the result: the per-element candidate set is
+//! sorted by [`OrderKey`], so specificity and source order decide exactly as
+//! before. The index is append-only, because stylesheets can only be added.
 //!
 //! # At-rules
 //!
@@ -56,16 +73,17 @@
 //!
 //! [`Stylesheet::parse`]: crate::Stylesheet::parse
 
+use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use jkva_dom::{Document, NodeId};
+use jkva_dom::{Document, ElementData, NodeId};
 
 use crate::computed::{ComputedStyle, DisplayType};
 use crate::declaration::Declaration;
 use crate::matching::matches;
-use crate::selector::Selector;
+use crate::selector::{Selector, SimpleSelector};
 use crate::specificity::Specificity;
-use crate::stylesheet::{Rule, Stylesheet};
+use crate::stylesheet::Stylesheet;
 use crate::ua::USER_AGENT_CSS;
 
 /// The computed style of every element of one document.
@@ -166,6 +184,145 @@ impl ComputedStyleMap {
     }
 }
 
+/// A reference to one selector of one rule.
+///
+/// The index stores references rather than copies so that a stylesheet is never
+/// duplicated; `rule` indexes [`StyleEngine::rules`] and `selector` indexes that
+/// rule's selector list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct SelectorRef {
+    /// Index into [`StyleEngine::rules`].
+    rule: u32,
+    /// Index of the selector inside the rule.
+    selector: u32,
+}
+
+/// Which bucket a selector is filed under.
+///
+/// Derived from the rightmost compound selector only; see the module docs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BucketKey<'a> {
+    /// The compound has an id selector.
+    Id(&'a str),
+    /// The compound has a class selector.
+    Class(&'a str),
+    /// The compound has a type selector without a namespace prefix.
+    Type(&'a str),
+    /// Nothing indexable: tested for every element.
+    Universal,
+}
+
+impl<'a> BucketKey<'a> {
+    /// Picks the bucket for a selector from its rightmost compound selector.
+    ///
+    /// Preference order is id, then class, then type, because that is the order
+    /// of decreasing selectivity. A namespace-qualified type selector is not
+    /// indexable (namespaces are not resolved by the matcher), and neither is a
+    /// relative selector, so both fall through to [`BucketKey::Universal`].
+    fn of(selector: &'a Selector) -> Self {
+        if selector.leading_combinator().is_some() {
+            return Self::Universal;
+        }
+        let Some(component) = selector.components().last() else {
+            return Self::Universal;
+        };
+
+        let mut id = None;
+        let mut class = None;
+        let mut type_name = None;
+        for simple in &component.compound.simples {
+            match simple {
+                SimpleSelector::Id(value) => id = Some(value.as_str()),
+                SimpleSelector::Class(value) => class = Some(value.as_str()),
+                SimpleSelector::Type(value) if !value.contains('|') => {
+                    type_name = Some(value.as_str());
+                }
+                _ => {}
+            }
+        }
+
+        if let Some(id) = id {
+            Self::Id(id)
+        } else if let Some(class) = class {
+            Self::Class(class)
+        } else if let Some(type_name) = type_name {
+            Self::Type(type_name)
+        } else {
+            Self::Universal
+        }
+    }
+}
+
+/// Selectors bucketed by the most selective part of their rightmost compound
+/// selector.
+///
+/// Type buckets are keyed by the ASCII-lowercased type name so that the HTML
+/// case-insensitivity of type selectors is handled once, at index time. The
+/// lookup lowercases the element's name only when it actually contains an ASCII
+/// uppercase byte, which foreign-content names can and HTML names cannot.
+#[derive(Clone, Debug, Default)]
+struct RuleIndex {
+    /// Selectors whose rightmost compound has an id selector.
+    by_id: HashMap<String, Vec<SelectorRef>>,
+    /// Selectors whose rightmost compound has a class selector.
+    by_class: HashMap<String, Vec<SelectorRef>>,
+    /// Selectors whose rightmost compound has a type selector, keyed by its
+    /// ASCII-lowercased name.
+    by_type: HashMap<String, Vec<SelectorRef>>,
+    /// Selectors that have to be tested against every element.
+    universal: Vec<SelectorRef>,
+}
+
+impl RuleIndex {
+    /// Files one selector under the bucket its rightmost compound selector picks.
+    fn insert(&mut self, selector: &Selector, selector_ref: SelectorRef) {
+        match BucketKey::of(selector) {
+            BucketKey::Id(id) => self
+                .by_id
+                .entry(id.to_owned())
+                .or_default()
+                .push(selector_ref),
+            BucketKey::Class(class) => self
+                .by_class
+                .entry(class.to_owned())
+                .or_default()
+                .push(selector_ref),
+            BucketKey::Type(name) => self
+                .by_type
+                .entry(name.to_ascii_lowercase())
+                .or_default()
+                .push(selector_ref),
+            BucketKey::Universal => self.universal.push(selector_ref),
+        }
+    }
+
+    /// Returns the selectors filed under `id`.
+    fn by_id(&self, id: &str) -> &[SelectorRef] {
+        self.by_id.get(id).map_or(&[], Vec::as_slice)
+    }
+
+    /// Returns the selectors filed under `class`.
+    fn by_class(&self, class: &str) -> &[SelectorRef] {
+        self.by_class.get(class).map_or(&[], Vec::as_slice)
+    }
+
+    /// Returns the selectors filed under the element's type name.
+    fn by_type(&self, element_name: &str) -> &[SelectorRef] {
+        if element_name.bytes().any(|byte| byte.is_ascii_uppercase()) {
+            self.by_type
+                .get(element_name.to_ascii_lowercase().as_str())
+                .map_or(&[], Vec::as_slice)
+        } else {
+            self.by_type.get(element_name).map_or(&[], Vec::as_slice)
+        }
+    }
+
+    /// Returns the selectors that must be tested for every element.
+    fn universal(&self) -> &[SelectorRef] {
+        &self.universal
+    }
+}
+
 /// Applies a set of stylesheets to a document.
 ///
 /// The engine owns its stylesheets and pre-computes, per rule, the specificity of
@@ -211,6 +368,7 @@ impl ComputedStyleMap {
 pub struct StyleEngine {
     sheets: Vec<Stylesheet>,
     rules: Vec<IndexedRule>,
+    index: RuleIndex,
     next_order: u32,
 }
 
@@ -256,6 +414,7 @@ impl StyleEngine {
         Self {
             sheets: Vec::new(),
             rules: Vec::new(),
+            index: RuleIndex::default(),
             next_order: 0,
         }
     }
@@ -308,6 +467,21 @@ impl StyleEngine {
         let sheet_index = self.sheets.len();
         let mut order = self.next_order;
         for (rule_index, rule) in sheet.rules().iter().enumerate() {
+            let engine_rule = u32::try_from(self.rules.len()).unwrap_or(u32::MAX);
+
+            // File every selector into its bucket. Doing this while the sheet is
+            // still a local keeps the borrows local; the index stores indices,
+            // not references into the sheet.
+            for (position, selector) in rule.selectors.iter().enumerate() {
+                self.index.insert(
+                    selector,
+                    SelectorRef {
+                        rule: engine_rule,
+                        selector: u32::try_from(position).unwrap_or(u32::MAX),
+                    },
+                );
+            }
+
             self.rules.push(IndexedRule {
                 sheet: sheet_index,
                 rule: rule_index,
@@ -324,18 +498,21 @@ impl StyleEngine {
 
     /// Computes the style of every element of `document`.
     ///
-    /// The walk is a single document-order pass, so it is `O(elements ×
-    /// declarations)` plus the cost of matching each selector against each
-    /// element.
+    /// The walk is a single document-order pass. Per element the cost is one
+    /// lookup per bucket the element can belong to (its id, each of its classes,
+    /// its type name, plus the universal bucket) followed by a full match test
+    /// per *bucketed* selector, so a selector that the index can filter out is
+    /// never matched. Elements whose rules are all in the universal bucket fall
+    /// back to the pre-index cost of testing every such selector.
     #[must_use]
     pub fn compute_styles(&self, document: &Document) -> ComputedStyleMap {
         let mut styles = ComputedStyleMap::new();
         for node in document.descendants(document.root()) {
-            if document.element(node).is_none() {
+            let Some(element) = document.element(node) else {
                 continue;
-            }
+            };
             let parent_style = document.parent(node).and_then(|parent| styles.get(parent));
-            let computed = self.compute_one(document, node, parent_style);
+            let computed = self.compute_one(document, node, element, parent_style);
             styles.insert(node, computed);
         }
         styles
@@ -356,21 +533,15 @@ impl StyleEngine {
         &self,
         document: &Document,
         node: NodeId,
+        element: &ElementData,
         parent: Option<&ComputedStyle>,
     ) -> ComputedStyle {
         let mut candidates: Vec<Candidate<'_>> = Vec::new();
-        for indexed in &self.rules {
-            let Some(rule) = self
-                .sheets
-                .get(indexed.sheet)
-                .and_then(|sheet| sheet.rules().get(indexed.rule))
-            else {
-                continue;
-            };
-            self.collect_rule_candidates(document, node, indexed, rule, &mut candidates);
-        }
+        self.collect_candidates(document, node, element, &mut candidates);
 
-        // Ascending sort, then apply in order: the last writer wins.
+        // Ascending sort, then apply in order: the last writer wins. Bucket order
+        // never leaks into the result, because the key carries specificity and
+        // source order.
         candidates.sort_by_key(|candidate| candidate.key);
         let mut declared: [Option<&str>; PropertyId::COUNT] = [None; PropertyId::COUNT];
         for candidate in candidates {
@@ -385,22 +556,63 @@ impl StyleEngine {
         style
     }
 
-    /// Appends one rule's matching declarations to `candidates`.
-    fn collect_rule_candidates<'a>(
-        &self,
+    /// Appends every declaration whose selector could match `element`.
+    ///
+    /// Only the buckets the element can possibly belong to are consulted: its id,
+    /// each of its classes, its type name, and the universal bucket.
+    fn collect_candidates<'a>(
+        &'a self,
         document: &Document,
         node: NodeId,
-        indexed: &IndexedRule,
-        rule: &'a Rule,
+        element: &ElementData,
         candidates: &mut Vec<Candidate<'a>>,
     ) {
-        for (position, selector) in rule.selectors.iter().enumerate() {
+        if let Some(id) = element.attribute("id") {
+            self.collect_selectors(document, node, self.index.by_id(id), candidates);
+        }
+        if let Some(classes) = element.attribute("class") {
+            for class in classes.split_ascii_whitespace() {
+                self.collect_selectors(document, node, self.index.by_class(class), candidates);
+            }
+        }
+        self.collect_selectors(
+            document,
+            node,
+            self.index.by_type(element.name()),
+            candidates,
+        );
+        self.collect_selectors(document, node, self.index.universal(), candidates);
+    }
+
+    /// Tests every selector in one bucket and appends the declarations of those
+    /// that match.
+    fn collect_selectors<'a>(
+        &'a self,
+        document: &Document,
+        node: NodeId,
+        selectors: &[SelectorRef],
+        candidates: &mut Vec<Candidate<'a>>,
+    ) {
+        for selector_ref in selectors {
+            let Some(indexed) = self.rules.get(selector_ref.rule as usize) else {
+                continue;
+            };
+            let Some(rule) = self
+                .sheets
+                .get(indexed.sheet)
+                .and_then(|sheet| sheet.rules().get(indexed.rule))
+            else {
+                continue;
+            };
+            let Some(selector) = rule.selectors.get(selector_ref.selector as usize) else {
+                continue;
+            };
             if !matches(document, node, selector) {
                 continue;
             }
             let specificity = indexed
                 .specificities
-                .get(position)
+                .get(selector_ref.selector as usize)
                 .copied()
                 .unwrap_or_default();
             for (offset, declaration) in rule.declarations.iter().enumerate() {
