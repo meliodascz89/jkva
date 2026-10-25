@@ -1,4 +1,4 @@
-//! CLI for reftest-diff. See `--help`.
+//! CLI for reftest-diff; run it without arguments to print usage to stderr.
 
 use reftest_diff::{compare_rgba, decode_png, diff_rgba, write_png};
 use std::path::PathBuf;

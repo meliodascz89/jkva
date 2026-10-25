@@ -1,4 +1,4 @@
-//! CLI for wpt-report. See `--help`.
+//! CLI for wpt-report; run it without arguments to print usage to stderr.
 
 use std::process::ExitCode;
 use wpt_report::summarize;
