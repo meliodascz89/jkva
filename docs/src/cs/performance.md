@@ -11,14 +11,16 @@ Každé číslo zde uvádí fixture, počet iterací, stroj a příkaz. Číslo 
 
 | Bench | Medián |
 |---|---|
-| parse-html | 3,02 ms |
-| parse-css | 0,82 ms |
-| cascade | 19,93 ms |
-| shape-text | 33,8 µs |
+| parse-html | 2,46 ms |
+| parse-css | 0,80 ms |
+| cascade | 2,60 ms |
+| shape-text | 30,5 µs |
 
 ## Co ta čísla znamenají
 
-Jsou to mikro-benchmarky vrstev, ne Speedometer a ne srovnání s Chromem. Nejhorší je `cascade`: styly se matchují průchodem všech pravidel pro každý element, bez indexu pravidel a bez sdílení stylů. To je známý úkol pro M2 a tahle tabulka má dokázat zlepšení, až přijde.
+Jsou to mikro-benchmarky vrstev, ne Speedometer a ne srovnání s Chromem.
+
+Kaskáda bývala nejhorší číslo: **19,93 ms**, protože se každé pravidlo testovalo proti každému elementu. Index pravidel podle id, class a typu (nejpravější složený selektor, s fallbackem na universal) ji dostal na 2,60 ms na stejné fixture — 8× v debugu a 2,2× v release. Co zbývá, je alokace na element, ne matching; to je další měřený krok.
 
 ## Pravidla
 
