@@ -63,6 +63,17 @@ fn split_unit(value: &str) -> Option<(&str, &str)> {
     Some(value.split_at(split))
 }
 
+/// Parses a border width, including the `thin`/`medium`/`thick` keywords.
+#[must_use]
+pub fn parse_border_width(value: &str, base: f32) -> f32 {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "thin" => 1.0,
+        "medium" => 3.0,
+        "thick" => 5.0,
+        other => parse_length(other, base).unwrap_or(0.0),
+    }
+}
+
 /// Parses the colours used by the fixtures: names, hex and `rgb()`.
 ///
 /// Unknown values return `None`; callers decide whether that means black or

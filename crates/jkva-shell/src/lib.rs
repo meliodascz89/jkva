@@ -36,7 +36,7 @@ use jkva_text::{FontCache, TextStyle};
 
 mod values;
 
-pub use values::{layout_display, parse_color, parse_font_size, parse_length};
+pub use values::{layout_display, parse_border_width, parse_color, parse_font_size, parse_length};
 
 /// Version of the reference shell.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -231,8 +231,23 @@ impl StyleSource for Styles<'_> {
     }
 
     fn border(&self, node: NodeId) -> Edges {
-        let _ = node;
-        Edges::ZERO
+        let Some(style) = self.map.get(node) else {
+            return Edges::ZERO;
+        };
+        let base = self.font_px(node);
+        let width = |width: &str, style: &str| {
+            if matches!(style.trim(), "none" | "hidden") {
+                0.0
+            } else {
+                parse_border_width(width, base)
+            }
+        };
+        Edges {
+            top: width(&style.border_top_width, &style.border_top_style),
+            right: width(&style.border_right_width, &style.border_right_style),
+            bottom: width(&style.border_bottom_width, &style.border_bottom_style),
+            left: width(&style.border_left_width, &style.border_left_style),
+        }
     }
 
     fn font_size(&self, node: NodeId) -> f32 {
@@ -305,6 +320,29 @@ fn build_scene(tree: &LayoutTree, styles: &Styles<'_>, fonts: &mut FontCache) ->
                 });
             }
         }
+        let border = styles.border(b.node);
+        if border.top > 0.0 || border.right > 0.0 || border.bottom > 0.0 || border.left > 0.0 {
+            let (x, y, w, h) = (
+                b.rect.origin.x,
+                b.rect.origin.y,
+                b.rect.size.w,
+                b.rect.size.h,
+            );
+            let color = styles.inherited_color(b.node);
+            let mut push = |x: f32, y: f32, w: f32, h: f32| {
+                if w > 0.0 && h > 0.0 {
+                    scene.push(SceneItem::Rect {
+                        rect: PaintRect::new(x, y, w, h),
+                        color,
+                    });
+                }
+            };
+            push(x, y, w, border.top);
+            push(x, y + h - border.bottom, w, border.bottom);
+            push(x, y, border.left, h);
+            push(x + w - border.right, y, border.right, h);
+        }
+
         let Some(run) = &b.text else { continue };
         let style = text_style(run.font_size, run.font_weight, &run.font_family);
         let shaped = fonts.shape(&run.text, &style);
