@@ -39,7 +39,7 @@
 use jkva_dom::{Document, NodeId, NodeKind};
 
 use crate::geometry::{Point, Rect};
-use crate::style::{Display, Edges, StyleSource};
+use crate::style::{Display, Edges, Length, StyleSource};
 use crate::text::{LINE_HEIGHT_FACTOR, TextMeasure, TextRun};
 use crate::tree::{LayoutBox, LayoutTree, Viewport};
 
@@ -61,7 +61,7 @@ use crate::tree::{LayoutBox, LayoutTree, Viewport};
 ///
 /// ```
 /// use jkva_dom::{Document, NodeId};
-/// use jkva_layout::{Display, Edges, Length, StyleSource, TextMeasure, Viewport, layout};
+/// use jkva_layout::{Display, Edges, Length, LengthEdges, StyleSource, TextMeasure, Viewport, layout};
 ///
 /// struct Blocky;
 ///
@@ -69,8 +69,8 @@ use crate::tree::{LayoutBox, LayoutTree, Viewport};
 ///     fn display(&self, _node: NodeId) -> Display { Display::Block }
 ///     fn width(&self, _node: NodeId) -> Length { Length::Auto }
 ///     fn height(&self, _node: NodeId) -> Length { Length::Auto }
-///     fn margin(&self, _node: NodeId) -> Edges { Edges::ZERO }
-///     fn padding(&self, _node: NodeId) -> Edges { Edges::ZERO }
+///     fn margin(&self, _node: NodeId) -> LengthEdges { LengthEdges::ZERO }
+///     fn padding(&self, _node: NodeId) -> LengthEdges { LengthEdges::ZERO }
 ///     fn border(&self, _node: NodeId) -> Edges { Edges::ZERO }
 ///     fn font_size(&self, _node: NodeId) -> f32 { 16.0 }
 ///     fn color(&self, _node: NodeId) -> [u8; 4] { [0, 0, 0, 255] }
@@ -389,7 +389,7 @@ impl Layouter<'_> {
                     // Text before a block becomes its own anonymous block, so the
                     // margins on either side of it are not adjacent any more.
                     self.flush_inline(&mut tokens, containing, &mut state);
-                    let margin = self.styles.margin(child).clamped();
+                    let margin = self.used_margin(child, containing);
                     let gap = match state.pending_margin.take() {
                         Some(bottom) => collapse_margins(bottom, margin.top),
                         None => margin.top,
@@ -409,6 +409,35 @@ impl Layouter<'_> {
         (state.children, state.cursor - top)
     }
 
+    /// Resolves a block's used margins, including percentage and auto centring.
+    fn used_margin(&self, node: NodeId, containing: ContainingBlock) -> Edges {
+        let spec = self.styles.margin(node);
+        let mut margin = spec.resolve(Some(containing.width)).clamped();
+        let Some(width) = self.styles.width(node).resolve(Some(containing.width)) else {
+            return margin;
+        };
+        let padding = self
+            .styles
+            .padding(node)
+            .resolve(Some(containing.width))
+            .clamped();
+        let border = self.styles.border(node).clamped();
+        let free = finite_non_negative(
+            containing.width - width - padding.horizontal() - border.horizontal(),
+        );
+        let auto_left = spec.left == Length::Auto;
+        let auto_right = spec.right == Length::Auto;
+        if auto_left && auto_right {
+            margin.left = free / 2.0;
+            margin.right = free / 2.0;
+        } else if auto_left {
+            margin.left = free;
+        } else if auto_right {
+            margin.right = free;
+        }
+        margin
+    }
+
     /// Lays out one block-level element.
     ///
     /// `y` is the top of the element's border box and `margin` its used margins; the
@@ -420,7 +449,11 @@ impl Layouter<'_> {
         y: f32,
         margin: Edges,
     ) -> BlockMetrics {
-        let padding = self.styles.padding(node).clamped();
+        let padding = self
+            .styles
+            .padding(node)
+            .resolve(Some(containing.width))
+            .clamped();
         let border = self.styles.border(node).clamped();
         let border_x = containing.x + margin.left;
         // An explicit width is a content-box width; `auto` fills the containing block
@@ -665,7 +698,7 @@ impl Layouter<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::style::Length;
+    use crate::style::{Length, LengthEdges};
 
     /// A style source with fixed values, used to exercise the pure helpers.
     struct FixedStyle {
@@ -701,12 +734,12 @@ mod tests {
             Length::Auto
         }
 
-        fn margin(&self, _node: NodeId) -> Edges {
-            Edges::ZERO
+        fn margin(&self, _node: NodeId) -> LengthEdges {
+            LengthEdges::ZERO
         }
 
-        fn padding(&self, _node: NodeId) -> Edges {
-            Edges::ZERO
+        fn padding(&self, _node: NodeId) -> LengthEdges {
+            LengthEdges::ZERO
         }
 
         fn border(&self, _node: NodeId) -> Edges {

@@ -11,8 +11,8 @@ use std::collections::HashMap;
 
 use jkva_dom::{Document, NodeId, parse_document};
 use jkva_layout::{
-    Display, Edges, LayoutBox, LayoutTree, Length, Rect, StyleSource, TextMeasure, TextRun,
-    Viewport, layout,
+    Display, Edges, LayoutBox, LayoutTree, Length, LengthEdges, Rect, StyleSource, TextMeasure,
+    TextRun, Viewport, layout,
 };
 
 const BLACK: [u8; 4] = [0, 0, 0, 255];
@@ -130,12 +130,12 @@ impl StyleSource for MockStyles {
         self.get(node).height.map_or(Length::Auto, Length::px)
     }
 
-    fn margin(&self, node: NodeId) -> Edges {
-        self.get(node).margin
+    fn margin(&self, node: NodeId) -> LengthEdges {
+        LengthEdges::from_edges(self.get(node).margin)
     }
 
-    fn padding(&self, node: NodeId) -> Edges {
-        self.get(node).padding
+    fn padding(&self, node: NodeId) -> LengthEdges {
+        LengthEdges::from_edges(self.get(node).padding)
     }
 
     fn border(&self, node: NodeId) -> Edges {

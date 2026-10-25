@@ -28,8 +28,8 @@ use jkva_dom::{Document, NodeId, NodeKind};
 use jkva_engine::parse_page;
 use jkva_gfx::{Image, Scene, SceneItem, TextureData, render_scene};
 use jkva_layout::{
-    Display, Edges, LayoutTree, Length, StyleSource, TextMeasure, Viewport as LayoutViewport,
-    layout,
+    Display, Edges, LayoutTree, Length, LengthEdges, StyleSource, TextMeasure,
+    Viewport as LayoutViewport, layout,
 };
 use jkva_paint::{DamageRegion, Rect as PaintRect};
 use jkva_style::{ComputedStyle, ComputedStyleMap, StyleEngine, Stylesheet};
@@ -315,17 +315,17 @@ impl<'a> Styles<'a> {
         &self,
         node: NodeId,
         pick: impl Fn(&ComputedStyle) -> (&str, &str, &str, &str),
-    ) -> Edges {
+    ) -> LengthEdges {
         let Some(style) = self.map.get(node) else {
-            return Edges::ZERO;
+            return LengthEdges::ZERO;
         };
         let (top, right, bottom, left) = pick(style);
         let base = self.font_px(node);
-        Edges {
-            top: parse_length(top, base).unwrap_or(0.0),
-            right: parse_length(right, base).unwrap_or(0.0),
-            bottom: parse_length(bottom, base).unwrap_or(0.0),
-            left: parse_length(left, base).unwrap_or(0.0),
+        LengthEdges {
+            top: parse_length_value(top, base),
+            right: parse_length_value(right, base),
+            bottom: parse_length_value(bottom, base),
+            left: parse_length_value(left, base),
         }
     }
 }
@@ -345,7 +345,7 @@ impl StyleSource for Styles<'_> {
         self.declared_length(node, |s| &s.height)
     }
 
-    fn margin(&self, node: NodeId) -> Edges {
+    fn margin(&self, node: NodeId) -> LengthEdges {
         self.edges(node, |s| {
             (
                 &s.margin_top,
@@ -356,7 +356,7 @@ impl StyleSource for Styles<'_> {
         })
     }
 
-    fn padding(&self, node: NodeId) -> Edges {
+    fn padding(&self, node: NodeId) -> LengthEdges {
         self.edges(node, |s| {
             (
                 &s.padding_top,
@@ -552,6 +552,43 @@ mod tests {
         <div id="a" class="box">A</div>
         <div id="b">B</div>
     "#;
+
+    #[test]
+    fn percentage_margins_resolve_against_the_containing_width() {
+        let frame = Frame::new(
+            "<style>#m { margin-left: 10% }</style><div id=\"m\">x</div>",
+            400,
+            600,
+        )
+        .unwrap();
+        let node = frame.element_by_id("m").unwrap();
+        let rect = frame.layout.box_for(node).unwrap().rect;
+        // Body content is 384px wide, so a 10% margin is 38.4px after the 8px body margin.
+        assert!(
+            (rect.origin.x - 46.4).abs() < 0.5,
+            "expected x=46.4, got {}",
+            rect.origin.x
+        );
+    }
+
+    #[test]
+    fn auto_margins_centre_a_fixed_width_box() {
+        let frame = Frame::new(
+            "<style>#c { width: 200px; margin: 0 auto }</style><div id=\"c\">x</div>",
+            400,
+            600,
+        )
+        .unwrap();
+        let node = frame.element_by_id("c").unwrap();
+        let rect = frame.layout.box_for(node).unwrap().rect;
+        // (384 - 200) / 2 = 92, plus the 8px body margin.
+        assert!(
+            (rect.origin.x - 100.0).abs() < 0.5,
+            "expected x=100, got {}",
+            rect.origin.x
+        );
+        assert!((rect.width() - 200.0).abs() < 0.5);
+    }
 
     #[test]
     fn percentage_width_resolves_against_the_containing_block() {

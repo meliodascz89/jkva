@@ -31,7 +31,7 @@
 //!
 //! ```
 //! use jkva_dom::{Document, NodeId};
-//! use jkva_layout::{Display, Edges, Length, StyleSource, TextMeasure, Viewport, layout};
+//! use jkva_layout::{Display, Edges, Length, LengthEdges, StyleSource, TextMeasure, Viewport, layout};
 //!
 //! struct Blocky;
 //!
@@ -39,8 +39,8 @@
 //!     fn display(&self, _node: NodeId) -> Display { Display::Block }
 //!     fn width(&self, _node: NodeId) -> Length { Length::Auto }
 //!     fn height(&self, _node: NodeId) -> Length { Length::Auto }
-//!     fn margin(&self, _node: NodeId) -> Edges { Edges::ZERO }
-//!     fn padding(&self, _node: NodeId) -> Edges { Edges::ZERO }
+//!     fn margin(&self, _node: NodeId) -> LengthEdges { LengthEdges::ZERO }
+//!     fn padding(&self, _node: NodeId) -> LengthEdges { LengthEdges::ZERO }
 //!     fn border(&self, _node: NodeId) -> Edges { Edges::ZERO }
 //!     fn font_size(&self, _node: NodeId) -> f32 { 16.0 }
 //!     fn color(&self, _node: NodeId) -> [u8; 4] { [0, 0, 0, 255] }
@@ -138,7 +138,7 @@ pub mod tree;
 
 pub use engine::layout;
 pub use geometry::{Point, Rect, Size};
-pub use style::{Display, Edges, Length, StyleSource};
+pub use style::{Display, Edges, Length, LengthEdges, StyleSource};
 pub use text::{LINE_HEIGHT_FACTOR, TextMeasure, TextRun};
 pub use tree::{LayoutBox, LayoutTree, Viewport};
 

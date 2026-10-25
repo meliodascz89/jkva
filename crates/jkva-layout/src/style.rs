@@ -84,6 +84,54 @@ impl Length {
     }
 }
 
+/// Margins or paddings where each side may be `auto`, a length or a percentage.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct LengthEdges {
+    /// Top edge.
+    pub top: Length,
+    /// Right edge.
+    pub right: Length,
+    /// Bottom edge.
+    pub bottom: Length,
+    /// Left edge.
+    pub left: Length,
+}
+
+impl LengthEdges {
+    /// Zero on every side.
+    pub const ZERO: Self = Self {
+        top: Length::Px(0.0),
+        right: Length::Px(0.0),
+        bottom: Length::Px(0.0),
+        left: Length::Px(0.0),
+    };
+
+    /// Wraps absolute pixel edges, as used by test doubles.
+    #[must_use]
+    pub const fn from_edges(edges: Edges) -> Self {
+        Self {
+            top: Length::Px(edges.top),
+            right: Length::Px(edges.right),
+            bottom: Length::Px(edges.bottom),
+            left: Length::Px(edges.left),
+        }
+    }
+
+    /// Resolves every side against `base`; `auto` becomes `0.0` here.
+    ///
+    /// Horizontal centring is layout's decision (it needs the used width), so this
+    /// conversion is deliberately dumb.
+    #[must_use]
+    pub fn resolve(self, base: Option<f32>) -> Edges {
+        Edges {
+            top: self.top.resolve(base).unwrap_or(0.0),
+            right: self.right.resolve(base).unwrap_or(0.0),
+            bottom: self.bottom.resolve(base).unwrap_or(0.0),
+            left: self.left.resolve(base).unwrap_or(0.0),
+        }
+    }
+}
+
 /// The four margins, paddings or border widths of one box, in CSS pixels.
 ///
 /// A single struct is used for margins, paddings and borders because layout treats
@@ -210,14 +258,14 @@ pub trait StyleSource {
     /// content, so content overflows; overflow does not exist in M1.
     fn height(&self, node: NodeId) -> Length;
 
-    /// Returns the margins of a box in CSS pixels.
+    /// Returns the declared margins; layout resolves them against the containing width.
     ///
-    /// Negative values are legal in CSS but are clamped to `0.0` by layout (see the
-    /// crate-level simplifications); report them as computed and let layout clamp.
-    fn margin(&self, node: NodeId) -> Edges;
+    /// Percentage margins are relative to the containing block's **width**, as CSS
+    /// requires, and `auto` on a horizontal side participates in centring.
+    fn margin(&self, node: NodeId) -> LengthEdges;
 
-    /// Returns the paddings of a box in CSS pixels.
-    fn padding(&self, node: NodeId) -> Edges;
+    /// Returns the declared paddings; percentages resolve against the containing width.
+    fn padding(&self, node: NodeId) -> LengthEdges;
 
     /// Returns the border widths of a box in CSS pixels.
     ///
