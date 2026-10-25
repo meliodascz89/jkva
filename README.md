@@ -31,7 +31,7 @@ The full toolchain, targets and CI are described in [`docs/src/en/building.md`](
 
 ## Where the decisions live
 
-- [`briefing/DECISIONS.md`](briefing/DECISIONS.md) — 25 ADRs: scope, architecture, measurement, team.
+- [`briefing/DECISIONS.md`](briefing/DECISIONS.md) — 24 ADRs: scope, architecture, measurement, team.
 - [`briefing/BRIEFING-0.1.cs.md`](briefing/BRIEFING-0.1.cs.md) — the 99 questions and the chosen answers.
 - [`briefing/ANSWERS.md`](briefing/ANSWERS.md) — answers, including the deviations from the recommendations.
 
