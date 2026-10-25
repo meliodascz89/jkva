@@ -24,14 +24,14 @@
 
 use std::cell::RefCell;
 
-use jkva_dom::{Document, NodeId};
+use jkva_dom::{Document, NodeId, NodeKind};
 use jkva_engine::parse_page;
 use jkva_gfx::{Image, Scene, SceneItem, TextureData, render_scene};
 use jkva_layout::{
     Display, Edges, LayoutTree, StyleSource, TextMeasure, Viewport as LayoutViewport, layout,
 };
-use jkva_paint::Rect as PaintRect;
-use jkva_style::{ComputedStyle, ComputedStyleMap, StyleEngine};
+use jkva_paint::{DamageRegion, Rect as PaintRect};
+use jkva_style::{ComputedStyle, ComputedStyleMap, StyleEngine, Stylesheet};
 use jkva_text::{FontCache, TextStyle};
 
 mod values;
@@ -61,31 +61,162 @@ pub fn render_page(html: &str, width: u32, height: u32) -> Result<RenderOutput, 
     if width == 0 || height == 0 {
         return Err("viewport dimensions must be non-zero".into());
     }
-    let page = parse_page(html);
-    let mut engine = StyleEngine::new();
-    for sheet in page.stylesheets {
-        engine.add_stylesheet(sheet);
-    }
-    let styles_map = engine.compute_styles(&page.document);
-
-    let styles = Styles::new(&styles_map, &page.document);
-    let mut fonts = FontCache::new();
-    let viewport = LayoutViewport {
-        width: width as f32,
-        height: height as f32,
-    };
-    let layout = {
-        let mut measure = Texts { fonts: &mut fonts };
-        layout(&page.document, &styles, viewport, &mut measure)
-    };
-    let scene = build_scene(&layout, &styles, &mut fonts);
-    let image = render_scene(width, height, &scene)?;
-
+    let frame = Frame::new(html, width, height)?;
+    let image = frame.render()?;
     Ok(RenderOutput {
         image,
-        layout,
-        warnings: page.warnings,
+        layout: frame.layout,
+        warnings: frame.warnings.clone(),
     })
+}
+
+/// A loaded, styled and laid-out document that can be mutated and re-measured.
+///
+/// This is the incremental seam: a mutation recomputes the style and layout for
+/// the document, diffs the geometry against the previous tree and returns the
+/// region that must be repainted. Matching and layout are still whole-document
+/// passes; what is incremental today is the *damage*, which is the contract the
+/// compositor will consume in M2/M3.
+#[derive(Debug)]
+pub struct Frame {
+    /// The document.
+    pub document: Document,
+    /// Author stylesheets found in the page.
+    pub sheets: Vec<Stylesheet>,
+    /// Computed styles for the current document.
+    pub styles: ComputedStyleMap,
+    /// The current box tree.
+    pub layout: LayoutTree,
+    /// Viewport the frame was measured at.
+    pub viewport: LayoutViewport,
+    /// Non-fatal problems collected while loading the page.
+    pub warnings: Vec<String>,
+    /// Damage from the most recent mutation, empty after [`Frame::new`].
+    pub damage: DamageRegion,
+}
+
+impl Frame {
+    /// Loads, styles and lays out a page.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the viewport has a zero dimension.
+    pub fn new(html: &str, width: u32, height: u32) -> Result<Self, String> {
+        if width == 0 || height == 0 {
+            return Err("viewport dimensions must be non-zero".into());
+        }
+        let page = parse_page(html);
+        let viewport = LayoutViewport {
+            width: width as f32,
+            height: height as f32,
+        };
+        let styles = compute_styles(&page.document, &page.stylesheets);
+        let mut fonts = FontCache::new();
+        let layout = {
+            let styles_adapter = Styles::new(&styles, &page.document);
+            let mut measure = Texts { fonts: &mut fonts };
+            layout(&page.document, &styles_adapter, viewport, &mut measure)
+        };
+        Ok(Self {
+            document: page.document,
+            sheets: page.stylesheets,
+            styles,
+            layout,
+            viewport,
+            warnings: page.warnings,
+            damage: DamageRegion::new(),
+        })
+    }
+
+    /// Finds an element by its `id` attribute.
+    #[must_use]
+    pub fn element_by_id(&self, id: &str) -> Option<NodeId> {
+        self.document
+            .descendants(self.document.root())
+            .find(|&node| {
+                matches!(self.document.kind(node), NodeKind::Element(_))
+                    && self
+                        .document
+                        .get_attribute(node, "id")
+                        .is_some_and(|value| value == id)
+            })
+    }
+
+    /// Sets an attribute, re-styles and re-lays out, and returns the damage.
+    ///
+    /// The mutated element is always damaged (its paint may change even when its
+    /// geometry does not); boxes that moved, resized or changed text are added by
+    /// the geometry diff.
+    pub fn set_attribute(&mut self, node: NodeId, name: &str, value: &str) -> DamageRegion {
+        let before = self.layout.boxes.clone();
+        self.document.set_attribute(node, name, value);
+        if let Some(old) = self.layout.box_for(node) {
+            self.damage.add(paint_rect(old.rect));
+        }
+        self.restyle_and_relayout(&before);
+        self.damage.clone()
+    }
+
+    fn restyle_and_relayout(&mut self, before: &[jkva_layout::LayoutBox]) {
+        let sheets = self.sheets.clone();
+        self.styles = compute_styles(&self.document, &sheets);
+        let mut fonts = FontCache::new();
+        let styles_adapter = Styles::new(&self.styles, &self.document);
+        let mut measure = Texts { fonts: &mut fonts };
+        self.layout = layout(&self.document, &styles_adapter, self.viewport, &mut measure);
+        let diff = damage_between(before, &self.layout);
+        self.damage.union(&diff);
+    }
+
+    /// Renders the current frame.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when Metal is unavailable or the scene cannot be built.
+    pub fn render(&self) -> Result<Image, String> {
+        let mut fonts = FontCache::new();
+        let styles_adapter = Styles::new(&self.styles, &self.document);
+        let scene = build_scene(&self.layout, &styles_adapter, &mut fonts);
+        render_scene(
+            self.viewport.width as u32,
+            self.viewport.height as u32,
+            &scene,
+        )
+    }
+}
+
+fn compute_styles(document: &Document, sheets: &[Stylesheet]) -> ComputedStyleMap {
+    let mut engine = StyleEngine::new();
+    for sheet in sheets {
+        engine.add_stylesheet(sheet.clone());
+    }
+    engine.compute_styles(document)
+}
+
+fn paint_rect(rect: jkva_layout::Rect) -> PaintRect {
+    PaintRect::new(rect.origin.x, rect.origin.y, rect.size.w, rect.size.h)
+}
+
+/// Union of the old and new geometry of every box whose geometry or text changed.
+fn damage_between(before: &[jkva_layout::LayoutBox], after: &LayoutTree) -> DamageRegion {
+    let mut damage = DamageRegion::new();
+    let old: std::collections::HashMap<NodeId, &jkva_layout::LayoutBox> =
+        before.iter().map(|b| (b.node, b)).collect();
+    for new_box in &after.boxes {
+        match old.get(&new_box.node) {
+            Some(old_box) => {
+                let moved = old_box.rect != new_box.rect
+                    || old_box.content != new_box.content
+                    || old_box.text != new_box.text;
+                if moved {
+                    damage.add(paint_rect(old_box.rect));
+                    damage.add(paint_rect(new_box.rect));
+                }
+            }
+            None => damage.add(paint_rect(new_box.rect)),
+        }
+    }
+    damage
 }
 
 /// Adapter from the cascade to layout's [`StyleSource`].
@@ -402,5 +533,59 @@ mod tests {
     #[test]
     fn rejects_empty_viewports() {
         assert!(render_page("<p>x</p>", 0, 100).is_err());
+    }
+
+    const DAMAGE_PAGE: &str = r#"
+        <style>
+        #a { background-color: red; }
+        #a-alt { background-color: green; }
+        #b { background-color: blue; margin-top: 200px; }
+        .box { width: 100px; }
+        .wide { width: 200px; }
+        </style>
+        <div id="a" class="box">A</div>
+        <div id="b">B</div>
+    "#;
+
+    #[test]
+    fn a_fresh_frame_has_no_damage() {
+        let frame = Frame::new(DAMAGE_PAGE, 400, 300).unwrap();
+        assert!(frame.damage.is_empty());
+    }
+
+    #[test]
+    fn a_background_change_damages_only_that_element() {
+        let mut frame = Frame::new(DAMAGE_PAGE, 400, 300).unwrap();
+        let a = frame.element_by_id("a").unwrap();
+        let b = frame.element_by_id("b").unwrap();
+        let a_rect = frame.layout.box_for(a).unwrap().rect;
+        let b_rect = frame.layout.box_for(b).unwrap().rect;
+
+        let damage = frame.set_attribute(a, "id", "a-alt");
+        assert!(!damage.is_empty(), "a paint change must damage");
+        let bounds = damage.bounds();
+        let a_centre = jkva_paint::Point::new(a_rect.origin.x + 4.0, a_rect.origin.y + 4.0);
+        let b_centre = jkva_paint::Point::new(b_rect.origin.x + 4.0, b_rect.origin.y + 4.0);
+        assert!(
+            bounds.contains(a_centre),
+            "damage must cover the changed box"
+        );
+        assert!(
+            !bounds.contains(b_centre),
+            "damage must not cover a distant box"
+        );
+    }
+
+    #[test]
+    fn a_width_change_damages_the_old_and_new_geometry() {
+        let mut frame = Frame::new(DAMAGE_PAGE, 400, 300).unwrap();
+        let a = frame.element_by_id("a").unwrap();
+        let damage = frame.set_attribute(a, "class", "wide");
+        let bounds = damage.bounds();
+        assert!(
+            bounds.width() >= 199.0,
+            "damage must span the old 100px and new 200px boxes, got {}",
+            bounds.width()
+        );
     }
 }

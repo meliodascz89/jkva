@@ -15,6 +15,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - `tools/bench-runner`: deterministic micro-benchmarks for HTML parse, CSS parse, the cascade and text shaping, with fixture sizes in every report.
 - `tools/reftest-runner`: renders a screenshot corpus with `jkva-shot` and compares it with `reftest-diff`; `examples/hello.html` has a golden image.
 - `jkva-core`: generational arena with typed, opaque ids and stale-handle detection.
+- `jkva-shell`: `Frame` with the incremental seam — an attribute mutation re-styles, re-lays out and returns a `DamageRegion` covering the changed element and every box that moved or resized.
 - `jkva-shell`: paints background colours and borders (currentColor) in addition to glyphs; `examples/cards.html` covers borders, wrapping and monospace.
 - `jkva-shell`: the M1 pipeline HTML → cascade → layout → text → Metal, and `jkva-shot` for PNG screenshots; `examples/hello.html` is the first rendered page.
 - `jkva-layout`: text fragments carry font weight and family, measured through `TextMeasure::measure_styled`; collapsible spaces are their own fragments so measurement and painting share one face.
