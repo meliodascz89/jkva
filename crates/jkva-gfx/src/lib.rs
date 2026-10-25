@@ -18,11 +18,12 @@ use objc2_foundation::NSString;
 
 use jkva_paint::{DisplayItem, DisplayList, Rect};
 use objc2_metal::{
-    MTLClearColor, MTLCommandBuffer, MTLCommandEncoder, MTLCommandQueue,
+    MTLBlendFactor, MTLClearColor, MTLCommandBuffer, MTLCommandEncoder, MTLCommandQueue,
     MTLCreateSystemDefaultDevice, MTLDevice, MTLLibrary, MTLLoadAction, MTLOrigin, MTLPixelFormat,
     MTLPrimitiveType, MTLRegion, MTLRenderCommandEncoder, MTLRenderPassDescriptor,
-    MTLRenderPipelineDescriptor, MTLRenderPipelineState, MTLResourceOptions, MTLSize,
-    MTLStorageMode, MTLStoreAction, MTLTexture, MTLTextureDescriptor, MTLTextureUsage,
+    MTLRenderPipelineDescriptor, MTLRenderPipelineState, MTLResourceOptions, MTLSamplerAddressMode,
+    MTLSamplerDescriptor, MTLSamplerMinMagFilter, MTLSize, MTLStorageMode, MTLStoreAction,
+    MTLTexture, MTLTextureDescriptor, MTLTextureUsage,
 };
 
 /// An RGBA8 image produced by the GPU and readable on the CPU.
@@ -392,6 +393,316 @@ pub fn render_display_list(width: u32, height: u32, list: &DisplayList) -> Resul
     readback(&target, width, height)
 }
 
+/// CPU-side RGBA8 image uploaded to the GPU as a texture.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TextureData {
+    /// Width in pixels.
+    pub width: u32,
+    /// Height in pixels.
+    pub height: u32,
+    /// Tightly packed RGBA8 pixels, `width * height * 4` bytes.
+    pub rgba: Vec<u8>,
+}
+
+/// One drawable item of a [`Scene`], in paint order.
+#[derive(Clone, Debug, PartialEq)]
+pub enum SceneItem {
+    /// A solid rectangle.
+    Rect {
+        /// Position and size in scene pixels.
+        rect: Rect,
+        /// Straight-alpha sRGB colour.
+        color: [u8; 4],
+    },
+    /// A textured rectangle, used for glyph bitmaps and images.
+    Image {
+        /// Position and size in scene pixels.
+        rect: Rect,
+        /// Source pixels; must be `width * height * 4` bytes.
+        texture: TextureData,
+        /// Multiplied with the sampled colour; white leaves the texture unchanged.
+        tint: [u8; 4],
+    },
+}
+
+/// An ordered list of items, later items painting over earlier ones.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Scene {
+    /// Items in paint order.
+    pub items: Vec<SceneItem>,
+}
+
+impl Scene {
+    /// Creates an empty scene.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self { items: Vec::new() }
+    }
+
+    /// Appends an item on top of the current scene.
+    pub fn push(&mut self, item: SceneItem) {
+        self.items.push(item);
+    }
+
+    /// Number of items.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.items.len()
+    }
+
+    /// Returns `true` when the scene has no items.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+}
+
+const SCENE_MSL: &str = r#"
+#include <metal_stdlib>
+using namespace metal;
+
+struct VIn {
+    float2 position;
+    float2 uv;
+    float4 color;
+};
+
+struct VOut {
+    float4 position [[position]];
+    float2 uv;
+    float4 color;
+};
+
+vertex VOut v_main(uint vid [[vertex_id]], constant VIn *vertices [[buffer(0)]]) {
+    VOut out;
+    out.position = float4(vertices[vid].position, 0.0, 1.0);
+    out.uv = vertices[vid].uv;
+    out.color = vertices[vid].color;
+    return out;
+}
+
+fragment float4 f_main(VOut in [[stage_in]],
+                       texture2d<float> tex [[texture(0)]],
+                       sampler samp [[sampler(0)]]) {
+    return in.color * tex.sample(samp, in.uv);
+}
+"#;
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+struct SceneVertex {
+    position: [f32; 2],
+    uv: [f32; 2],
+    color: [f32; 4],
+}
+
+fn make_texture(
+    device: &ProtocolObject<dyn MTLDevice>,
+    data: &TextureData,
+) -> Result<Retained<ProtocolObject<dyn MTLTexture>>, String> {
+    if data.width == 0 || data.height == 0 {
+        return Err("texture dimensions must be non-zero".into());
+    }
+    let expected = data.width as usize * data.height as usize * 4;
+    if data.rgba.len() != expected {
+        return Err(format!(
+            "texture has {} bytes, expected {expected}",
+            data.rgba.len()
+        ));
+    }
+    // SAFETY: valid pixel format and non-zero dimensions.
+    let descriptor = unsafe {
+        MTLTextureDescriptor::texture2DDescriptorWithPixelFormat_width_height_mipmapped(
+            MTLPixelFormat::RGBA8Unorm,
+            data.width as usize,
+            data.height as usize,
+            false,
+        )
+    };
+    descriptor.setUsage(MTLTextureUsage::ShaderRead);
+    descriptor.setStorageMode(MTLStorageMode::Shared);
+    let texture = device
+        .newTextureWithDescriptor(&descriptor)
+        .ok_or("could not create a texture")?;
+    let pointer = std::ptr::NonNull::new(data.rgba.as_ptr().cast::<std::ffi::c_void>().cast_mut())
+        .ok_or("texture data is empty")?;
+    let region = MTLRegion {
+        origin: MTLOrigin { x: 0, y: 0, z: 0 },
+        size: MTLSize {
+            width: data.width as usize,
+            height: data.height as usize,
+            depth: 1,
+        },
+    };
+    // SAFETY: the buffer holds exactly width*height*4 bytes and the region covers
+    // the whole texture; storage mode is Shared so a CPU upload is allowed.
+    unsafe {
+        texture.replaceRegion_mipmapLevel_withBytes_bytesPerRow(
+            region,
+            0,
+            pointer,
+            data.width as usize * 4,
+        );
+    }
+    Ok(texture)
+}
+
+/// Renders a scene of rectangles and textured quads onto a white background.
+///
+/// Text is drawn by uploading an alpha coverage bitmap as a [`TextureData`] with
+/// white RGB and using the tint as the text colour; the pipeline blends with
+/// source alpha, so coverage becomes anti-aliasing.
+///
+/// # Errors
+///
+/// Returns an error when Metal is unavailable, a texture is malformed, or a
+/// pipeline object cannot be created.
+pub fn render_scene(width: u32, height: u32, scene: &Scene) -> Result<Image, String> {
+    if width == 0 || height == 0 {
+        return Err("image dimensions must be non-zero".into());
+    }
+    let device = MTLCreateSystemDefaultDevice().ok_or("no Metal device")?;
+    let target = new_target(&device, width, height, [1.0, 1.0, 1.0, 1.0])?;
+
+    let state = build_scene_pipeline(&device)?;
+    let sampler = {
+        let descriptor = MTLSamplerDescriptor::new();
+        descriptor.setMinFilter(MTLSamplerMinMagFilter::Linear);
+        descriptor.setMagFilter(MTLSamplerMinMagFilter::Linear);
+        descriptor.setSAddressMode(MTLSamplerAddressMode::ClampToEdge);
+        descriptor.setTAddressMode(MTLSamplerAddressMode::ClampToEdge);
+        device
+            .newSamplerStateWithDescriptor(&descriptor)
+            .ok_or("could not create a sampler")?
+    };
+
+    let white = make_texture(
+        &device,
+        &TextureData {
+            width: 1,
+            height: 1,
+            rgba: vec![255, 255, 255, 255],
+        },
+    )?;
+
+    let mut vertices: Vec<SceneVertex> = Vec::new();
+    let mut draws: Vec<(Retained<ProtocolObject<dyn MTLTexture>>, usize, usize)> = Vec::new();
+    for item in &scene.items {
+        let start = vertices.len();
+        let (rect, texture, tint) = match item {
+            SceneItem::Rect { rect, color } => (*rect, None, *color),
+            SceneItem::Image {
+                rect,
+                texture,
+                tint,
+            } => (*rect, Some(texture), *tint),
+        };
+        let to_ndc = |x: f32, y: f32| -> [f32; 2] {
+            [x / width as f32 * 2.0 - 1.0, 1.0 - y / height as f32 * 2.0]
+        };
+        let (x0, y0, x1, y1) = (rect.min_x(), rect.min_y(), rect.max_x(), rect.max_y());
+        let c = [
+            f32::from(tint[0]) / 255.0,
+            f32::from(tint[1]) / 255.0,
+            f32::from(tint[2]) / 255.0,
+            f32::from(tint[3]) / 255.0,
+        ];
+        let p0 = SceneVertex {
+            position: to_ndc(x0, y0),
+            uv: [0.0, 0.0],
+            color: c,
+        };
+        let p1 = SceneVertex {
+            position: to_ndc(x1, y0),
+            uv: [1.0, 0.0],
+            color: c,
+        };
+        let p2 = SceneVertex {
+            position: to_ndc(x1, y1),
+            uv: [1.0, 1.0],
+            color: c,
+        };
+        let p3 = SceneVertex {
+            position: to_ndc(x0, y1),
+            uv: [0.0, 1.0],
+            color: c,
+        };
+        vertices.extend_from_slice(&[p0, p1, p2, p0, p2, p3]);
+        let texture = match texture {
+            Some(data) => make_texture(&device, data)?,
+            None => white.clone(),
+        };
+        draws.push((texture, start, 6));
+    }
+
+    if vertices.is_empty() {
+        finish(&device, &target, |_encoder| Ok(()))?;
+        return readback(&target, width, height);
+    }
+
+    let bytes = std::mem::size_of_val(vertices.as_slice());
+    let pointer = std::ptr::NonNull::new(vertices.as_ptr().cast::<std::ffi::c_void>().cast_mut())
+        .ok_or("vertex buffer is empty")?;
+    // SAFETY: the pointer is valid for the duration of the call; the buffer copies.
+    let buffer = unsafe {
+        device.newBufferWithBytes_length_options(
+            pointer,
+            bytes,
+            MTLResourceOptions::StorageModeShared,
+        )
+    }
+    .ok_or("could not create the vertex buffer")?;
+
+    finish(&device, &target, |encoder| {
+        encoder.setRenderPipelineState(&state);
+        // SAFETY: buffer index 0 matches the shader signature and the sampler is
+        // bound at index 0; every texture and vertex range belongs to a draw.
+        unsafe {
+            encoder.setVertexBuffer_offset_atIndex(Some(&buffer), 0, 0);
+            encoder.setFragmentSamplerState_atIndex(Some(&sampler), 0);
+            for (texture, start, count) in &draws {
+                encoder.setFragmentTexture_atIndex(Some(texture), 0);
+                encoder.drawPrimitives_vertexStart_vertexCount(
+                    MTLPrimitiveType::Triangle,
+                    *start,
+                    *count,
+                );
+            }
+        }
+        Ok(())
+    })?;
+    readback(&target, width, height)
+}
+
+fn build_scene_pipeline(
+    device: &ProtocolObject<dyn MTLDevice>,
+) -> Result<Retained<ProtocolObject<dyn MTLRenderPipelineState>>, String> {
+    let source = NSString::from_str(SCENE_MSL);
+    let library = device
+        .newLibraryWithSource_options_error(&source, None)
+        .map_err(|e| format!("shader compilation failed: {}", e.localizedDescription()))?;
+    let vertex = library
+        .newFunctionWithName(&NSString::from_str("v_main"))
+        .ok_or("vertex function not found")?;
+    let fragment = library
+        .newFunctionWithName(&NSString::from_str("f_main"))
+        .ok_or("fragment function not found")?;
+    let pipeline = MTLRenderPipelineDescriptor::new();
+    pipeline.setVertexFunction(Some(&vertex));
+    pipeline.setFragmentFunction(Some(&fragment));
+    // SAFETY: index 0 exists in the attachments array.
+    let attachment = unsafe { pipeline.colorAttachments().objectAtIndexedSubscript(0) };
+    attachment.setPixelFormat(MTLPixelFormat::RGBA8Unorm);
+    attachment.setBlendingEnabled(true);
+    attachment.setSourceRGBBlendFactor(MTLBlendFactor::SourceAlpha);
+    attachment.setDestinationRGBBlendFactor(MTLBlendFactor::OneMinusSourceAlpha);
+    attachment.setSourceAlphaBlendFactor(MTLBlendFactor::One);
+    attachment.setDestinationAlphaBlendFactor(MTLBlendFactor::OneMinusSourceAlpha);
+    device
+        .newRenderPipelineStateWithDescriptor_error(&pipeline)
+        .map_err(|e| format!("pipeline creation failed: {}", e.localizedDescription()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -411,6 +722,30 @@ mod tests {
     #[test]
     fn zero_sized_render_is_rejected() {
         assert!(render_clear(0, 4, [0.0, 0.0, 0.0, 1.0]).is_err());
+    }
+
+    #[test]
+    fn scene_draws_tinted_textures_over_rects() {
+        let mut scene = Scene::new();
+        scene.push(SceneItem::Image {
+            rect: Rect::new(0.0, 0.0, 32.0, 32.0),
+            texture: TextureData {
+                width: 1,
+                height: 1,
+                rgba: vec![255, 255, 255, 255],
+            },
+            tint: [255, 0, 0, 255],
+        });
+        scene.push(SceneItem::Rect {
+            rect: Rect::new(16.0, 16.0, 32.0, 32.0),
+            color: [0, 0, 255, 255],
+        });
+        let Some(image) = render_scene(64, 64, &scene).ok() else {
+            return;
+        };
+        assert_eq!(image.pixel(8, 8), Some([255, 0, 0, 255]));
+        assert_eq!(image.pixel(24, 24), Some([0, 0, 255, 255]));
+        assert_eq!(image.pixel(60, 8), Some([255, 255, 255, 255]));
     }
 
     #[test]
