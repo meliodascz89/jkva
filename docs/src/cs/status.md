@@ -21,7 +21,7 @@ Co je hotové, co je ověřené a co se záměrně ještě nedělá. Každý ř�
 |---|---|---|
 | HTML → DOM | hotovo | `jkva-dom`, html5ever 0.40; 38 testů |
 | CSS parser, matching, kaskáda, UA sheet | hotovo | `jkva-style`; 157 testů |
-| Blokový a inline layout | hotovo | `jkva-layout`; 49 testů; procenta, auto centrování, zalamování |
+| Blokový a inline layout | hotovo | `jkva-layout`; 49 testů; inline boxy, procenta, auto centrování, zalamování |
 | Shaping a rasterizace glyfů | hotovo | `jkva-text`, fontdb + harfrust + swash; 21 testů |
 | Raster a kompozice | hotovo | `jkva-gfx` scéna, alpha blending |
 | Screenshot harness se zlatými stránkami | hotovo | `examples/hello.html`, `examples/cards.html`, `tools/reftest-runner` |
@@ -33,7 +33,6 @@ Co je hotové, co je ověřené a co se záměrně ještě nedělá. Každý ř�
 
 Nejsou schované; jsou to úkoly M2+.
 
-- **Inline boxy se zplošťují.** `<span>` s pozadím, rámečkem nebo paddingem zatím nekreslí vlastní box; jeho text se přidá do okolního inline toku.
 - **Rámečky kreslí jen `currentColor`**; `border-color` není sledovaná vlastnost.
 - **Oficiální harness `wpt run`** potřebuje JS engine a WebDriver, tedy M4. Reftest runner je náhrada pro M1, s publikovanými limity.
 - **Layout je celodokumentový průchod.** Inkrementální je dnes jen damage.

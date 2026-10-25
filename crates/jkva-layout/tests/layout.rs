@@ -539,9 +539,13 @@ fn inline_elements_are_flattened_into_the_block_inline_flow() {
     );
     let tree = layout_with(&document, &styles, 800.0, 600.0);
 
-    // No box for the span: only the root, the body and the text fragment.
-    assert_eq!(tree.len(), 3);
-    assert!(tree.box_for(span).is_none());
+    // The span gets its own box covering the text it wraps, but its margins,
+    // padding, border and width must not move the flow.
+    assert_eq!(tree.len(), 4);
+    let span_box = tree.box_for(span).expect("inline box");
+    assert!(span_box.text.is_none());
+    assert_eq!(span_box.rect.origin, jkva_layout::Point::new(0.0, 0.0));
+    assert_close(span_box.rect.width(), 48.0);
     let run = box_of(&tree, inline_text);
     assert_eq!(run.rect.origin, jkva_layout::Point::new(0.0, 0.0));
     assert_close(run.rect.width(), 48.0);

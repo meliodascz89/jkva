@@ -136,10 +136,15 @@ struct BlockMetrics {
 }
 
 /// An item in the flow of one block, after inline boxes have been flattened.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 enum Flow {
-    /// A text node; its words join the current inline run.
-    Text(NodeId),
+    /// A text node with the inline elements it is nested in, outermost first.
+    Text {
+        /// The text node.
+        node: NodeId,
+        /// Inline ancestors whose boxes the text belongs to.
+        inline: Vec<NodeId>,
+    },
     /// A block-level element; it flushes the inline run and starts a block box.
     Block(NodeId),
 }
@@ -164,6 +169,8 @@ enum Token {
         weight: u16,
         /// Font family the word is measured at.
         family: String,
+        /// Inline ancestors of the word, outermost first.
+        inline: Vec<NodeId>,
     },
     /// One collapsible space. Consecutive spaces are merged into one.
     Space {
@@ -177,6 +184,8 @@ enum Token {
         family: String,
         /// Text colour of the node the space came from.
         color: [u8; 4],
+        /// Inline ancestors of the space, outermost first.
+        inline: Vec<NodeId>,
     },
 }
 
@@ -197,6 +206,8 @@ struct PendingFragment {
     weight: u16,
     /// Font family the fragment is measured at.
     family: String,
+    /// Inline ancestors whose boxes this fragment contributes to.
+    inline: Vec<NodeId>,
 }
 
 /// A line being filled with fragments.
@@ -307,6 +318,7 @@ fn push_space(
     weight: u16,
     family: &str,
     color: [u8; 4],
+    inline: &[NodeId],
 ) {
     if tokens.is_empty() || matches!(tokens.last(), Some(Token::Space { .. })) {
         return;
@@ -317,6 +329,7 @@ fn push_space(
         weight,
         family: family.to_string(),
         color,
+        inline: inline.to_vec(),
     });
 }
 
@@ -384,7 +397,7 @@ impl Layouter<'_> {
         let mut tokens: Vec<Token> = Vec::new();
         for item in flow {
             match item {
-                Flow::Text(text_node) => self.collect_text(text_node, &mut tokens),
+                Flow::Text { node, inline } => self.collect_text(node, &inline, &mut tokens),
                 Flow::Block(child) => {
                     // Text before a block becomes its own anonymous block, so the
                     // margins on either side of it are not adjacent any more.
@@ -507,30 +520,35 @@ impl Layouter<'_> {
     fn collect_flow(&self, node: NodeId) -> Vec<Flow> {
         let mut items = Vec::new();
         for child in self.document.children(node) {
-            self.collect_flow_item(child, &mut items);
+            self.collect_flow_item(child, &[], &mut items);
         }
         items
     }
 
     /// Appends one node's contribution to `items`, recursing through inline boxes.
-    fn collect_flow_item(&self, node: NodeId, items: &mut Vec<Flow>) {
+    fn collect_flow_item(&self, node: NodeId, inline: &[NodeId], items: &mut Vec<Flow>) {
         match self.document.kind(node) {
-            NodeKind::Text(_) => items.push(Flow::Text(node)),
+            NodeKind::Text(_) => items.push(Flow::Text {
+                node,
+                inline: inline.to_vec(),
+            }),
             // Comments generate no box and are not even laid out.
             NodeKind::Comment(_) => {}
             // A detached document fragment is not reachable through `children`, but a
             // hand-built document can nest one; treat it as transparent.
             NodeKind::Document => {
                 for child in self.document.children(node) {
-                    self.collect_flow_item(child, items);
+                    self.collect_flow_item(child, inline, items);
                 }
             }
             NodeKind::Element(_) => match self.styles.display(node) {
                 Display::None => {}
                 Display::Block => items.push(Flow::Block(node)),
                 Display::Inline => {
+                    let mut nested = inline.to_vec();
+                    nested.push(node);
                     for child in self.document.children(node) {
-                        self.collect_flow_item(child, items);
+                        self.collect_flow_item(child, &nested, items);
                     }
                 }
             },
@@ -538,7 +556,7 @@ impl Layouter<'_> {
     }
 
     /// Collapses the whitespace of one text node into word and space tokens.
-    fn collect_text(&self, node: NodeId, tokens: &mut Vec<Token>) {
+    fn collect_text(&self, node: NodeId, inline: &[NodeId], tokens: &mut Vec<Token>) {
         let NodeKind::Text(content) = self.document.kind(node) else {
             return;
         };
@@ -557,9 +575,10 @@ impl Layouter<'_> {
                         color,
                         weight,
                         family: family.clone(),
+                        inline: inline.to_vec(),
                     });
                 }
-                push_space(tokens, node, font_size, weight, &family, color);
+                push_space(tokens, node, font_size, weight, &family, color, inline);
             } else {
                 word.push(character);
             }
@@ -572,6 +591,7 @@ impl Layouter<'_> {
                 color,
                 weight,
                 family,
+                inline: inline.to_vec(),
             });
         }
     }
@@ -600,8 +620,20 @@ impl Layouter<'_> {
         for line in lines {
             let line_height = line.height();
             let mut x = containing.x;
+            let mut spans: Vec<(NodeId, f32, f32)> = Vec::new();
             for fragment in line.fragments {
-                let rect = Rect::new(x, state.cursor, fragment.width, line_height);
+                let left = x;
+                let right = x + fragment.width;
+                for &inline in &fragment.inline {
+                    match spans.iter_mut().find(|(node, _, _)| *node == inline) {
+                        Some((_, min, max)) => {
+                            *min = min.min(left);
+                            *max = max.max(right);
+                        }
+                        None => spans.push((inline, left, right)),
+                    }
+                }
+                let rect = Rect::new(left, state.cursor, fragment.width, line_height);
                 let index = self.boxes.len();
                 self.boxes.push(LayoutBox {
                     node: fragment.node,
@@ -610,7 +642,7 @@ impl Layouter<'_> {
                     children: Vec::new(),
                     text: Some(TextRun {
                         text: fragment.text,
-                        origin: Point::new(x, state.cursor),
+                        origin: Point::new(left, state.cursor),
                         font_size: fragment.font_size,
                         color: fragment.color,
                         font_weight: fragment.weight,
@@ -619,7 +651,20 @@ impl Layouter<'_> {
                     }),
                 });
                 state.children.push(index);
-                x += fragment.width;
+                x = right;
+            }
+            // One inline box per element per line, covering all of its fragments.
+            for (node, left, right) in spans {
+                let rect = Rect::new(left, state.cursor, right - left, line_height);
+                let index = self.boxes.len();
+                self.boxes.push(LayoutBox {
+                    node,
+                    rect,
+                    content: rect,
+                    children: Vec::new(),
+                    text: None,
+                });
+                state.children.push(index);
             }
             state.cursor += line_height;
         }
@@ -641,6 +686,7 @@ impl Layouter<'_> {
                     weight,
                     family,
                     color,
+                    inline,
                 } => {
                     if !line.is_empty() {
                         let width = finite_non_negative(
@@ -654,6 +700,7 @@ impl Layouter<'_> {
                             color,
                             weight,
                             family,
+                            inline,
                         });
                     }
                 }
@@ -664,6 +711,7 @@ impl Layouter<'_> {
                     color,
                     weight,
                     family,
+                    inline,
                 } => {
                     let word_width = finite_non_negative(
                         self.text.measure_styled(&text, font_size, weight, &family),
@@ -684,6 +732,7 @@ impl Layouter<'_> {
                         color,
                         weight,
                         family,
+                        inline,
                     });
                 }
             }
@@ -781,7 +830,7 @@ mod tests {
             boxes: Vec::new(),
         };
         let mut tokens = Vec::new();
-        layouter.collect_text(node, &mut tokens);
+        layouter.collect_text(node, &[], &mut tokens);
         tokens
     }
 
@@ -863,14 +912,14 @@ mod tests {
             boxes: Vec::new(),
         };
         let mut tokens = Vec::new();
-        layouter.collect_text(first, &mut tokens);
-        layouter.collect_text(second, &mut tokens);
+        layouter.collect_text(first, &[], &mut tokens);
+        layouter.collect_text(second, &[], &mut tokens);
         assert_eq!(words(&tokens), ["foo", "bar"]);
         assert_eq!(tokens.len(), 3);
 
         let mut tokens = Vec::new();
-        layouter.collect_text(third, &mut tokens);
-        layouter.collect_text(second, &mut tokens);
+        layouter.collect_text(third, &[], &mut tokens);
+        layouter.collect_text(second, &[], &mut tokens);
         assert_eq!(words(&tokens), ["baz", "bar"]);
         // No space token at the junction: the two words are glued together.
         assert_eq!(tokens.len(), 2);
@@ -905,13 +954,13 @@ mod tests {
         };
         let flow = layouter.collect_flow(body);
         assert_eq!(flow.len(), 2);
-        assert!(matches!(flow[0], Flow::Text(node) if node == inline_text));
+        assert!(matches!(flow[0], Flow::Text { node, .. } if node == inline_text));
         assert!(matches!(flow[1], Flow::Block(node) if node == block));
         // The hidden subtree contributes nothing at all.
         assert!(
             !flow
                 .iter()
-                .any(|item| matches!(item, Flow::Text(node) if *node == hidden_text))
+                .any(|item| matches!(item, Flow::Text { node, .. } if *node == hidden_text))
         );
     }
 }

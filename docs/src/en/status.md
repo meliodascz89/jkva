@@ -21,7 +21,7 @@ What is done, what is verified, and what is deliberately not done yet. Every lin
 |---|---|---|
 | HTML → DOM | done | `jkva-dom`, html5ever 0.40; 38 tests |
 | CSS parse, selector matching, cascade, UA sheet | done | `jkva-style`; 157 tests |
-| Block and inline layout | done | `jkva-layout`; 49 tests; percentages, auto centring, wrapping |
+| Block and inline layout | done | `jkva-layout`; 49 tests; inline boxes, percentages, auto centring, wrapping |
 | Text shaping and glyph rasterization | done | `jkva-text`, fontdb + harfrust + swash; 21 tests |
 | Raster + compositing path | done | `jkva-gfx` scene renderer, alpha blending |
 | Screenshot harness with golden pages | done | `examples/hello.html`, `examples/cards.html`, `tools/reftest-runner` |
@@ -33,7 +33,6 @@ What is done, what is verified, and what is deliberately not done yet. Every lin
 
 These are not hidden; they are the M2+ work.
 
-- **Inline element boxes are flattened.** A `<span>` with background, border or padding does not paint its own box yet; its text joins the surrounding inline flow.
 - **Borders paint in `currentColor` only**; `border-color` is not a tracked property.
 - **The official `wpt run` harness** needs a JS engine and WebDriver and arrives with M4. The reftest runner is the M1 substitute, with its caveats published.
 - **Layout is a full-document pass.** Only damage is incremental today.

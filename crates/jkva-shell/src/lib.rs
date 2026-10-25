@@ -479,7 +479,11 @@ fn build_scene(tree: &LayoutTree, styles: &Styles<'_>, fonts: &mut FontCache) ->
             push(x, y, border.left, h);
             push(x + w - border.right, y, border.right, h);
         }
+    }
 
+    // Glyphs are drawn after every background and border, so an inline
+    // background sits behind the text it wraps instead of covering it.
+    for b in &tree.boxes {
         let Some(run) = &b.text else { continue };
         let style = text_style(run.font_size, run.font_weight, &run.font_family);
         let shaped = fonts.shape(&run.text, &style);
@@ -552,6 +556,27 @@ mod tests {
         <div id="a" class="box">A</div>
         <div id="b">B</div>
     "#;
+
+    #[test]
+    fn an_inline_background_is_painted_behind_its_text() {
+        let frame = Frame::new(
+            "<style>#s { background-color: #ff0000 }</style><p>before <span id=\"s\">xx</span> after</p>",
+            400,
+            100,
+        )
+        .unwrap();
+        let node = frame.element_by_id("s").unwrap();
+        let rect = frame.layout.box_for(node).unwrap().rect;
+        let image = frame.render().unwrap();
+        let x = rect.origin.x as u32 + 1;
+        let y = rect.origin.y as u32 + 1;
+        let offset = ((y * image.width + x) * 4) as usize;
+        assert_eq!(
+            &image.rgba[offset..offset + 4],
+            &[255, 0, 0, 255],
+            "expected the inline background at ({x},{y})"
+        );
+    }
 
     #[test]
     fn percentage_margins_resolve_against_the_containing_width() {
