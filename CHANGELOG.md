@@ -10,4 +10,6 @@ All notable changes to this project are documented here. The format follows [Kee
 - `jkva-platform` Metal probe: reports the default device and Apple9 family support.
 - Documentation skeleton (mdBook, English and Czech), contributing and security policies.
 - CI: macOS format/clippy/test/docs, Linux check for portable crates.
+- `tools/reftest-diff`: deterministic pixel diff for reference tests, with diff image output.
+- `tools/wpt-report`: Web Platform Tests pass-rate summary and CI gate.
 - The decision record: 99 answered questions and 24 ADRs.
