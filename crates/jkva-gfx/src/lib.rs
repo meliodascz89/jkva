@@ -488,6 +488,9 @@ fragment float4 f_main(VOut in [[stage_in]],
 }
 "#;
 
+/// One draw: the texture to bind, the first vertex and the vertex count.
+type SceneDraw = (Retained<ProtocolObject<dyn MTLTexture>>, usize, usize);
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 struct SceneVertex {
@@ -586,7 +589,7 @@ pub fn render_scene(width: u32, height: u32, scene: &Scene) -> Result<Image, Str
     )?;
 
     let mut vertices: Vec<SceneVertex> = Vec::new();
-    let mut draws: Vec<(Retained<ProtocolObject<dyn MTLTexture>>, usize, usize)> = Vec::new();
+    let mut draws: Vec<SceneDraw> = Vec::new();
     for item in &scene.items {
         let start = vertices.len();
         let (rect, texture, tint) = match item {
