@@ -11,16 +11,16 @@ Každé číslo zde uvádí fixture, počet iterací, stroj a příkaz. Číslo 
 
 | Bench | Medián |
 |---|---|
-| parse-html | 2,46 ms |
+| parse-html | 2,73 ms |
 | parse-css | 0,80 ms |
-| cascade | 2,60 ms |
-| shape-text | 30,5 µs |
+| cascade | 1,94 ms |
+| shape-text | 31,8 µs |
 
 ## Co ta čísla znamenají
 
 Jsou to mikro-benchmarky vrstev, ne Speedometer a ne srovnání s Chromem.
 
-Kaskáda bývala nejhorší číslo: **19,93 ms**, protože se každé pravidlo testovalo proti každému elementu. Index pravidel podle id, class a typu (nejpravější složený selektor, s fallbackem na universal) ji dostal na 2,60 ms na stejné fixture — 8× v debugu a 2,2× v release. Co zbývá, je alokace na element, ne matching; to je další měřený krok.
+Kaskáda bývala nejhorší číslo: **19,93 ms**, protože se každé pravidlo testovalo proti každému elementu. Dva měřené kroky to opravily: index pravidel podle id, class a typu (nejpravější složený selektor, fallback na universal) a odstranění dvou třetin alokací na element. Nyní je to **1,94 ms** na stejné fixture — 10,3× v debugu a 4,8× v release od první baseline. Co zbývá, je jeden `String` na vypočtenou vlastnost (23 na element), a to je dokumentovaná podlaha, dokud `ComputedStyle` nebude vlastnit text.
 
 ## Pravidla
 

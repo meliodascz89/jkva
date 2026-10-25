@@ -11,16 +11,16 @@ Every number here names the fixture, the iteration count, the machine and the co
 
 | Bench | Median |
 |---|---|
-| parse-html | 2.46 ms |
+| parse-html | 2.73 ms |
 | parse-css | 0.80 ms |
-| cascade | 2.60 ms |
-| shape-text | 30.5 µs |
+| cascade | 1.94 ms |
+| shape-text | 31.8 µs |
 
 ## What these numbers mean
 
 They are layer micro-benchmarks, not Speedometer and not a comparison with Chrome.
 
-The cascade used to be the slow one at **19.93 ms** because every rule was tested against every element. Rule indexing by id, class and type (rightmost compound, with a universal fallback) brought it to 2.60 ms on the same fixture — 8x in debug and 2.2x in release. What is left is per-element allocation, not matching; that is the next measured step.
+The cascade used to be the slow one at **19.93 ms** because every rule was tested against every element. Two measured steps fixed it: rule indexing by id, class and type (rightmost compound, universal fallback), then removing two thirds of the per-element allocations. It is now **1.94 ms** on the same fixture — 10.3x in debug and 4.8x in release since the first baseline. What is left is one `String` per computed field (23 per element) and that is the documented floor until `ComputedStyle` stops owning text.
 
 ## Rules
 
