@@ -1,0 +1,147 @@
+{
+  "section": "js",
+  "order": 12,
+  "title": "JavaScript, WebAssembly a bindingy",
+  "intro": "Tohle je největší „koupit vs. postavit\" rozhodnutí. JavaScript engine je uzavřený systém s jasnou specifikací a test262 – na rozdíl od HTML parseru se dá teoreticky napsat. Ale výkon moderního JS je výsledek desítek let práce na JIT, inline caching a GC. Boa je správná, ale řádově pomalejší; vlastní engine srovnatelný s V8 je projekt na roky.\n\nPro srovnání s Chrome na Speedometeru je výhoda mít **stejný JS engine**: rozdíl ve skóre pak měří přesně to, co jsme napsali my (layout, styl, paint). To je vědecky čistší a marketingově silnější.",
+  "questions": [
+    {
+      "id": "Q62",
+      "title": "Který JavaScript engine?",
+      "why": "Volba určuje výkon, velikost binárky, složitost buildování a hlavně to, jak bezpečně půjde propojit JS s naším DOM. Je to **jednosměrné rozhodnutí** – musí padnout předtím, než zamrazíme objektový model DOM. Z výzkumu: `mozjs` je jediné bindingy s produkčním prohlížečem za sebou a s přesným trasováním Rust objektů; `deno_core` je výkonnější ve JS, ale je stavěné jako runtime, ne jako DOM engine.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "V8 (crate `v8`, případně `deno_core`)",
+          "note": "Nejvyšší JS výkon a stejný základ jako Chrome, takže benchmarky měří naši práci. Ale: `deno_core` je runtime-shaped, nemá přesné host-GC trasování (jen Weak/TracedReference), každé čtvrtletí breaking API a ~100 MB+. Použitelné, pokud jsme ochotni si cppgc vrstvu napsat sami.",
+          "rec": false
+        },
+        {
+          "key": "B",
+          "label": "SpiderMonkey (crate `mozjs`)",
+          "note": "Engine Firefoxu, Servo ho používá v produkci. Klíčové: TraceTrait přesně trasuje Rust-owned DOM uzly, takže GC cykly DOM↔JS jdou řešit správně – přesně tam, kde Ladybird unikal 15 GB. Předkompilované archivy pro arm64, MPL-2.0. Slabší JS výkon než V8 a méně pohodlné API, ale pro nás je to ta správná strana kompromisu.",
+          "rec": true
+        },
+        {
+          "key": "C",
+          "label": "JavaScriptCore (JSC)",
+          "note": "Engine Safari, na macOS nejlépe integrovaný a energeticky nejúspornější. Ale embedderské API je méně vhodné pro vlastní DOM a ladění je obtížnější.",
+          "rec": false
+        },
+        {
+          "key": "D",
+          "label": "Boa (čistě Rust)",
+          "note": "Žádná C++ závislost, snadná integrace, ale výkon je řádově jinde – Speedometer by nebyl konkurenceschopný. Vhodné jen pro experimenty.",
+          "rec": false
+        },
+        {
+          "key": "E",
+          "label": "Vlastní engine od nuly",
+          "note": "Největší „from scratch\" příběh, ale je to projekt na roky a výsledek bude dlouho horší než Boa. Nedoporučuji pro 0.1.",
+          "rec": false
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q63",
+      "title": "Jak generovat DOM bindingy pro JS?",
+      "why": "Web IDL má stovky rozhraní. Ruční psaní bindingů je pomalé, náchylné k chybám a nekonzistentní. Generátor z IDL je standardní řešení (Chromium, Gecko) a jediné rozumné pro rozsah, který chceme.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Vlastní generátor z Web IDL (build.rs) + IDL soubory ze specifikace",
+          "note": "Konzistentní, rychlé a rozšiřitelné; jednou napsaný generátor ušetří měsíce. Vyžaduje ale inicialní investici a testy (idlharness).",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Ručně psané bindingy",
+          "note": "Nejlepší kontrola a výkon pro horké cesty, ale u stovek rozhraní neudržitelné."
+        },
+        {
+          "key": "C",
+          "label": "Hybrid: generátor + ruční optimalizace horkých cest",
+          "note": "Pragmatické a výkonné, ale složitější údržba. Vhodné jako evoluce varianty A."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q64",
+      "title": "Jak řešit vztah JS GC a DOM?",
+      "why": "DOM uzly drží JS objekty a JS objekty drží DOM uzly – vznikají cykly. Špatné řešení znamená unikající paměť nebo pády při uvolnění. V8 nabízí traced wrappers (cppgc), které tomuto přesně čelí.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Přesné trasování (mozjs TraceTrait, případně V8 cppgc/Traceable)",
+          "note": "Správné a bezpečné řešení: GC vidí naše DOM uzly a může je uvolnit i v cyklech. `mozjs` to má hotové přes TraceTrait, V8 to řeší cppgc. Vyžaduje pečlivé trace funkce, ale řeší cykly i přírůstkové uvolňování.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Weak reference + ruční úklid",
+          "note": "Jednodušší, ale snadno vzniknou cykly, které nikdy nezmizí – přesně to, kvůli čemu jsou prohlížeče paměťově náročné."
+        },
+        {
+          "key": "C",
+          "label": "Vlastní GC pro DOM",
+          "note": "Maximální kontrola, ale psát GC je samostatný výzkum; nedoporučuji."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q65",
+      "title": "WebAssembly v 0.1?",
+      "why": "Wasm potřebují moderní aplikace (Figma, Google Workspace, herní enginy) a je to pákový efekt na výkon webu. Zároveň je to další runtime, další testovací matice a potenciální bezpečnostní plocha.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Ne v 0.1, ale s připraveným rozhraním (feature flag)",
+          "note": "Soustředíme se na renderovací jádro. Wasmtime přidáme v 0.2 – architektura s ním počítá.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Ano, wasmtime hned",
+          "note": "Otevře moderní aplikace a je to skvělý marketing, ale +4–8 týdnů a další závislost."
+        },
+        {
+          "key": "C",
+          "label": "Vlastní Wasm interpret/JIT",
+          "note": "Zajímavý výzkum, ale v 0.1 nemá místo."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q66",
+      "title": "Moduly, workers a event loop JS?",
+      "why": "Moderní weby používají ES moduly a import maps; část z nich i Web Workers. Worker znamená druhý JS kontext a sdílení/klonování dat – další složitost, ale bez něj některé aplikace zamrznou.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "ES moduly + import maps; workery až v 0.2",
+          "note": "Pokryje většinu moderních webů. Workery navrhneme v API, ale implementace počká.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "I dedikované workery v 0.1",
+          "note": "Víc reálných aplikací projde, ale strukturální clone, přenos ArrayBufferů a ladění kontextů jsou drahé."
+        },
+        {
+          "key": "C",
+          "label": "Jen klasické skripty bez modulů",
+          "note": "Nejrychlejší, ale moderní weby (Vite, Next.js) nepojedou."
+        }
+      ],
+      "other": true
+    }
+  ]
+}

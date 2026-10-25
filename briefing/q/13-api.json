@@ -1,0 +1,169 @@
+{
+  "section": "api",
+  "order": 13,
+  "title": "Web API surface a formuláře",
+  "intro": "Jádro není jen vykreslování – weby ožívají díky Web API. Zároveň platí, že čím víc API, tím víc práce a tím víc bezpečnostních děr. Pro 0.1 potřebujeme přesně tu množinu, která pokryje korpus a Speedometer, a nic navíc „protože by to bylo hezké\".\n\nPravidlo: každé API musí mít konkrétní web nebo test, který ho vyžaduje. Jinak jde do backlogu.",
+  "questions": [
+    {
+      "id": "Q67",
+      "title": "Která Web API musí 0.1 mít?",
+      "why": "Tohle je páteř interaktivity. Bez API níže nefunguje žádný moderní web ani benchmark. Naopak API jako Service Workers nebo IndexedDB jsou drahá a pro korpus z Q02 nepotřebná.",
+      "type": "multi",
+      "options": [
+        {
+          "key": "A",
+          "label": "DOM, CSSOM, EventTarget, CustomEvent",
+          "note": "Základ všeho; bez toho nejde ani jeden framework.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Fetch + XMLHttpRequest",
+          "note": "Načítání dat; XHR je starý, ale stále používaný knihovnami.",
+          "rec": true
+        },
+        {
+          "key": "C",
+          "label": "History + Location (pushState, hashchange, navigace)",
+          "note": "SPA routování; bez toho se React Router a spol. rozbijí.",
+          "rec": true
+        },
+        {
+          "key": "D",
+          "label": "localStorage + sessionStorage",
+          "note": "Přihlášení, témata, košík; nejpoužívanější storage API.",
+          "rec": true
+        },
+        {
+          "key": "E",
+          "label": "Timers, requestAnimationFrame, requestIdleCallback",
+          "note": "Animace a plánování; rAF je kritické pro plynulost.",
+          "rec": true
+        },
+        {
+          "key": "F",
+          "label": "IntersectionObserver, ResizeObserver, MutationObserver",
+          "note": "Lazy-loading obrázků, responzivní komponenty; dnes standard.",
+          "rec": true
+        },
+        {
+          "key": "G",
+          "label": "URL, URLSearchParams, Blob, File, FormData, atob/btoa",
+          "note": "Práce s daty a formuláři; levné a široce používané.",
+          "rec": true
+        },
+        {
+          "key": "H",
+          "label": "Layout API: getBoundingClientRect, getComputedStyle, scrollTo, scrollIntoView",
+          "note": "Každá knihovna ho používá pro pozicování tooltipů a animací.",
+          "rec": true
+        },
+        {
+          "key": "I",
+          "label": "Focus, selection, clipboard (základ)",
+          "note": "Přístupnost a kopírování; clipboard vyžaduje permissions.",
+          "rec": true
+        },
+        {
+          "key": "J",
+          "label": "WebSocket + EventSource",
+          "note": "Realtime aplikace; WebSocket je levný, pokud už máme síť.",
+          "rec": true
+        },
+        {
+          "key": "K",
+          "label": "crypto.getRandomValues, matchMedia, Performance API",
+          "note": "Bezpečnostní primitiva a responzivita; matchMedia je nutné pro media queries v JS.",
+          "rec": true
+        },
+        {
+          "key": "L",
+          "label": "Canvas 2D API",
+          "note": "Grafy a vizualizace; Speedometer ho používá.",
+          "rec": true
+        },
+        {
+          "key": "M",
+          "label": "IndexedDB, Service Workers, WebRTC, Geolocation, Notifications",
+          "note": "Drahé a pro 0.1 nepotřebné; odložit."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q68",
+      "title": "Storage nad rámec localStorage?",
+      "why": "IndexedDB je výkonné a používá ho mnoho aplikací, ale vyžaduje asynchronní API, transakce a verzování schématu. Pro 0.1 je to velký kus práce s malým dopadem na korpus.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Jen localStorage a sessionStorage; IndexedDB v 0.2",
+          "note": "Pokryje přihlášení a nastavení; weby, které potřebují IDB, budou mít omezenou funkčnost – zdokumentujeme.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "I základní IndexedDB",
+          "note": "Víc aplikací projde, ale +4–6 týdnů a složité testování."
+        },
+        {
+          "key": "C",
+          "label": "Žádný storage",
+          "note": "Nejrychlejší, ale přihlášení a personalizace nefungují."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q69",
+      "title": "Integrace s platformou (soubory, schránka, oprávnění)?",
+      "why": "Nahrávání souborů a schránka jsou nutné pro reálné použití; notifikace a geolokace vyžadují UI pro oprávnění a jsou na začátek zbytečné. Zároveň jde o bezpečnostně citlivé API.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "File input, stahování, schránka, jednoduchý permissions model",
+          "note": "Pokryje reálné weby a je to bezpečně zvládnutelné. Notifikace, geolokace a USB/NFC až později.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Všechno včetně notifikací a geolokace",
+          "note": "Víc kompletní, ale vyžaduje UI oprávnění a řešení soukromí – odvádí od jádra."
+        },
+        {
+          "key": "C",
+          "label": "Nic z toho",
+          "note": "Nejjednodušší, ale nahrávání souborů je základní funkce webu."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q70",
+      "title": "Přístupnost (accessibility) v 0.1?",
+      "why": "Přístupnost je správná věc a zároveň základ pro AI vrstvu (sémantický strom stránky). Plná integrace s VoiceOver je ale samostatný projekt. Rozumný kompromis: správný AX strom v jádře, systémová integrace později.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Strom AX rolí a jmen v jádře + export pro embedder a AI; VoiceOver most později",
+          "note": "Řeší obojí: přístupnost i AI. Most do macOS Accessibility API přidáme, až bude strom stabilní.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Plná integrace s VoiceOverem hned",
+          "note": "Nejlepší pro uživatele, ale je to měsíce práce a silná vazba na AppKit."
+        },
+        {
+          "key": "C",
+          "label": "Žádná accessibility",
+          "note": "Nejrychlejší, ale veřejný projekt si to nemůže dovolit – a přišli bychom o základ pro AI."
+        }
+      ],
+      "other": true
+    }
+  ]
+}

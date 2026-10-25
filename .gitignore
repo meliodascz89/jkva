@@ -1,0 +1,7 @@
+/target
+**/*.rs.bk
+.DS_Store
+/docs/book
+*.pdb
+
+/research/_raw/

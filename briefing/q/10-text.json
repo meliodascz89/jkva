@@ -1,0 +1,158 @@
+{
+  "section": "text",
+  "order": 10,
+  "title": "Text, fonty a typografie",
+  "intro": "Text je nejdůležitější část webu – a zároveň nejčastěji podceňovaná. Špatné tvarování (shaping), chybějící fallback font nebo ošklivý anti-aliasing zničí dojem z celého jádra, i kdyby layout byl dokonalý.\n\nDobrá zpráva: shaping i rasterizaci lze převzít z hotových Rust knihoven (rustybuzz/harfrust, swash) a soustředit se na glyfový atlas, cache a kvalitu výstupu. Špatná zpráva: kvalita textu je vizuálně nejvíc vidět, takže se v ní nedá šetřit.",
+  "questions": [
+    {
+      "id": "Q51",
+      "title": "Který shaping engine?",
+      "why": "Shaping je převod textu na glyfy se správnými ligaturami, kerningem a pozicemi – pro latinku jednoduché, pro arabštinu, dévanágarí nebo emoji velmi složité. Pozor: `rustybuzz` je od roku 2026 archivovaný a jeho autoři sami doporučují přejít na `harfrust`.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "harfrust",
+          "note": "Rust port HarfBuzzu od lidí z HarfBuzz/Unicode, který sám HarfBuzz doporučuje jako nástupce rustybuzzu. Parita s HarfBuzz 15, méně než 25 % pomalejší než originál, aktivní vývoj (0.15, říjen 2026). Servo i cosmic-text už na něm staví.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "rustybuzz",
+          "note": "Zralý a dobře známý, ale archivovaný a bez dalšího vývoje. Použitelné jen jako dočasný fallback."
+        },
+        {
+          "key": "C",
+          "label": "Vlastní shaping",
+          "note": "Plná kontrola a žádná závislost, ale je to jeden z nejtěžších problémů v typografii; nedoporučuji."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q52",
+      "title": "Odkud brát fonty a fallback?",
+      "why": "Bez správného fallbacku se česká diakritika, CJK nebo emoji zobrazí jako prázdné čtverečky. Zároveň každý zabudovaný font zvětšuje binárku.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Systémové fonty (fontdb) + malá zabudovaná sada fallbacků",
+          "note": "macOS fonty pro běžný text; zabudované fallbacky pro emoji a základní CJK, aby weby vypadaly správně i bez instalace fontů. Rozumná velikost binárky.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Jen systémové fonty",
+          "note": "Nejmenší binárka, ale na webech s vlastními fonty a emoji bude vidět rozdíl proti Safari."
+        },
+        {
+          "key": "C",
+          "label": "Zabudovat velkou sadu (Noto komplet)",
+          "note": "Nejlepší konzistence všude, ale stovky MB a pomalý start – proti našemu slibu nízké paměti."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q53",
+      "title": "Jak rasterizovat glyfy?",
+      "why": "Rasterizace rozhoduje o ostrosti textu a výkonu. Cesty po glyfech jsou kvalitní, ale drahé; atlas s instancovanými quady je rychlý a škáluje.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "swash rasterizace do glyfového atlasu, kreslení instancovanými quady přes vello",
+          "note": "Rychlé, škálovatelné, kvalitní AA. Vello od 2026 nabízí `vello_gpu` se `Scene::glyph_run` (rasterizace glyfů na GPU + atlas), případně `glifo` + `vello_cpu` pro CPU cestu. Atlas se buduje postupně a drží v GPU paměti; ideální pro UMA.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Každý glyf jako vektorová cesta",
+          "note": "Nejlepší kvalita při libovolném zoomu, ale u dlouhých textů výrazně pomalejší."
+        },
+        {
+          "key": "C",
+          "label": "Bitové mapy předrenderované při startu",
+          "note": "Predikovatelné, ale špatně se škáluje a neumí plynulý zoom ani velké fonty."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q54",
+      "title": "Jaký typografický cíl kvality?",
+      "why": "„Krásné vykreslování\" je subjektivní. Na Retina displejích se dnes používá hlavně grayscale AA s gamma korekcí; subpixel AA (ClearType styl) je na macOS/miniLED spíš na škodu. Rozhodnutí musí být explicitní, jinak se bude měnit podle nálady.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Retina-first: grayscale AA s gamma korekcí, jemné hinting, konzistence se Safari",
+          "note": "Odpovídá tomu, jak dnes vypadají weby na Macu; nejlepší kompromis kvality a výkonu. Cílem je, aby text vypadal „stejně správně\" jako v Safari.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Subpixel AA pro non-Retina displeje",
+          "note": "Ostřejší text na starších monitorech, ale na Retina/OLED může působit barevně a komplikuje kompozici."
+        },
+        {
+          "key": "C",
+          "label": "Čistě spec-neutral: bez gamma korekce a hintingu",
+          "note": "Teoreticky „správné\", ale vizuálně horší než konkurence – přesně to, čemu se chceme vyhnout."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q55",
+      "title": "Textový editing, kurzor, výběr a IME v 0.1?",
+      "why": "Bez textového editingu nejde vyplnit formulář ani použít vyhledávání. Pro češtinu navíc potřebujeme mrtvé klávesy (ˇ, ´) a pro CJK IME. Toto je často přehlížená část, která rozhoduje o použitelnosti.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Plný základní editing: výběr, kurzor, mazání, schránka, mrtvé klávesy, IME",
+          "note": "Nutné pro formuláře i Speedometer. Implementace je náročná (bidi výběr, IME kandidáti), ale bez ní jádro není použitelné.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Jen jednoduchý input bez výběru a IME",
+          "note": "Rychlé, ale čeština s diakritikou a CJK budou nefunkční; uživatelé to okamžitě poznají."
+        },
+        {
+          "key": "C",
+          "label": "Odloučit editing do 0.2",
+          "note": "Ušetří týdny, ale Speedometer a formuláře nepůjdou – v rozporu s Q02/Q07."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q56",
+      "title": "Variabilní fonty, barevné fonty a emoji?",
+      "why": "Moderní weby používají variabilní fonty (Inter, Recursive) a barevné emoji. Bez podpory vypadá typografie „z jiné éry\".",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Variabilní fonty + COLRv1 + systémové emoji",
+          "note": "Pokryje moderní weby a emoji; COLRv1 je dnes standardní cesta pro barevné fonty.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Jen variabilní fonty, emoji jako monochromatické",
+          "note": "Jednodušší, ale emoji budou vypadat špatně – a těch je na webech hodně."
+        },
+        {
+          "key": "C",
+          "label": "Minimum: statické fonty, bez emoji podpory",
+          "note": "Nejrychlejší, ale vizuálně nejvíc poznat."
+        }
+      ],
+      "other": true
+    }
+  ]
+}

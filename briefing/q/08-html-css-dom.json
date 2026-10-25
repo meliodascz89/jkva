@@ -1,0 +1,288 @@
+{
+  "section": "html-css-dom",
+  "order": 8,
+  "title": "HTML, DOM a CSS",
+  "intro": "Tohle je „vstupní brána\" jádra. Zde platí nejvíc to, co říkal výzkum: **parsery se nevyplatí psát od nuly.** HTML5 parsing je definovaný tisícovkami pravidel pro chybové stavy a jeho ruční implementace je měsíce práce s vysokou pravděpodobností chyb, které produkční prohlížeče nemají. Stejně tak CSS syntaxe s forward-compatible parsingem.\n\nNaše „from scratch\" je jinde: v DOM reprezentaci, kaskádě, výpočtu stylů, invalidaci a v tom, jak vše propojíme s layoutem a JS. Tam vzniká výkon a kvalita.",
+  "questions": [
+    {
+      "id": "Q36",
+      "title": "HTML parser: použít html5ever, nebo psát vlastní?",
+      "why": "html5ever je spec-compliant parser z dílny Servo/Mozilla, prošel testy html5lib a je v produkci. Vlastní parser znamená znovuobjevení všech chybových stavů (implicitní uzavírání tagů, tabulky, select, foster parenting) – a to je přesně práce, kterou nikdo neocení.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "html5ever",
+          "note": "Spec-compliant, rychlý, bezpečný, aktivně udržovaný. Strom si stavíme sami přes TreeSink, takže DOM zůstává náš.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Vlastní parser od nuly",
+          "note": "Plná kontrola a možnost přidat rozšíření (source mapy, streaming), ale realisticky 3–6 měsíců práce a vysoké riziko chyb."
+        },
+        {
+          "key": "C",
+          "label": "lol_html (streaming rewriter) jako základ",
+          "note": "Skvělé pro transformace, ale není to plnohodnotný DOM builder; narazíme na limity u tabulek a foster parentingu."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q37",
+      "title": "Potřebujeme pozice ve zdrojovém HTML (source spans) už v 0.1?",
+      "why": "Source spans umožňují ukázat „tento prvek je na řádku 42\" – nutné pro DevTools, error reporting a nástroje. html5ever je historicky neposkytuje a jejich doplnění znamená fork nebo vlastní vrstvu.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Ne, odložit na dobu, kdy budou DevTools",
+          "note": "V 0.1 nemáme DevTools UI (Q05), takže spans nemají konzumenta. Ušetříme fork a údržbu.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Ano, fork html5ever s podporou spans hned",
+          "note": "Připraveno pro budoucnost a lepší diagnostiku, ale musíme udržovat fork a hlídat upstream změny."
+        },
+        {
+          "key": "C",
+          "label": "Lehká mapa spans jen pro chyby parseru",
+          "note": "Kompromis: přesné pozice jen tam, kde hlásíme chybu, ne pro každý uzel."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q38",
+      "title": "Jak postavit DOM?",
+      "why": "DOM je naše IP a nejčastěji používaná struktura. Převzetí cizího DOM (blitz-dom) zrychlí start, ale přineseme si cizí rozhodnutí a závislost. Vlastní DOM postavený na html5ever TreeSink je přirozená hranice.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Vlastní arena DOM napojený na html5ever TreeSink",
+          "note": "Kontrola nad reprezentací, možnost optimalizovat pro layout i JS bindingy. Odpovídá Q21 (generační arena).",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Převzít blitz-dom a stavět na něm",
+          "note": "Ušetří měsíce a je to nejblíž existujícímu řešení, ale dědíme jejich model, tempo vývoje a omezení; „from scratch\" se rozpadá."
+        },
+        {
+          "key": "C",
+          "label": "Rc<RefCell> DOM",
+          "note": "Nejrychlejší prototyp, ale výkonově i bezpečnostně slepá ulička."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q39",
+      "title": "CSS: kaskáda a výpočet stylů – postavit na čem?",
+      "why": "Toto je největší jednotlivé rozhodnutí v celém jádře. Kaskáda, dědičnost, shorthandy, jednotky, barvy, media queries a invalidace jsou dohromady roky práce. Stylo (Firefox) je nejzralejší implementace, ale je pevně svázané s DOM a je to obrovská závislost.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "lightningcss/cssparser pro parsování + vlastní kaskáda a computed values nad řízenou sadou vlastností",
+          "note": "Moderní syntaxe (nesting, oklch, @layer) zdarma, kontrola nad kaskádou a invalidací, žádné svázání s cizím DOM. Rozsah vlastností řídíme daty o reálném využití – Blitz zveřejňuje tabulku procentuálního výskytu vlastností na reálných webech, což je ideální prioritizační dataset. V M0 navíc uděláme týdenní spike Stylo, abychom rozhodli podle dat, ne dojmu.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Integrace Stylo (crate `stylo` z projektu Servo)",
+          "note": "Nejvyšší správnost a roky optimalizací zdarma, včetně invalidace a animací. `stylo` 0.22 je publikované (2026-09) a Blitz ho reálně používá. Ale musíme implementovat Servo DOM traity, nést MPL-2.0 závislost a API se hýbe (0.19→0.22 za tři měsíce); Blitz kvůli tomu drží vlastní `stylo_taffy` glue crate."
+        },
+        {
+          "key": "C",
+          "label": "Vlastní parser i kaskáda od nuly",
+          "note": "Maximální kontrola a „čistota\", ale realisticky +9–12 měsíců a vysoké riziko chyb ve forward-compatible parsingu."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q40",
+      "title": "Které CSS funkce musí 0.1 umět?",
+      "why": "Tohle je definice „moderního webu\". Moderní weby (Tailwind 4, komponentové knihovny) používají @layer, custom properties, oklch a nesting. Bez nich vypadají rozbitě, i když základní box model funguje.",
+      "type": "multi",
+      "options": [
+        {
+          "key": "A",
+          "label": "Základ: box model, barvy, pozadí, okraje, fonty, text",
+          "note": "Bez toho nefunguje nic.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Flexbox",
+          "note": "Drtivá většina moderních layoutů.",
+          "rec": true
+        },
+        {
+          "key": "C",
+          "label": "Grid",
+          "note": "Dashboardy, galerie, složité layouty; dnes standard.",
+          "rec": true
+        },
+        {
+          "key": "D",
+          "label": "Custom properties (CSS proměnné)",
+          "note": "Základ témat a komponentových knihoven.",
+          "rec": true
+        },
+        {
+          "key": "E",
+          "label": "Cascade layers (@layer)",
+          "note": "Tailwind 4 a moderní reset styly je používají; bez nich je kaskáda špatně.",
+          "rec": true
+        },
+        {
+          "key": "F",
+          "label": "Nesting (&)",
+          "note": "Dnes běžné v ručně psaném i generovaném CSS.",
+          "rec": true
+        },
+        {
+          "key": "G",
+          "label": ":has(), :is(), :where(), :not()",
+          "note": "Moderní selektory; :has je dnes široce používaný.",
+          "rec": true
+        },
+        {
+          "key": "H",
+          "label": "Container queries",
+          "note": "Komponentové knihovny je začínají používat; náročné na invalidaci.",
+          "rec": false
+        },
+        {
+          "key": "I",
+          "label": "Transforms, transitions, animations",
+          "note": "Bez transitions působí UI mrtvě; animations jsou potřeba pro loadery.",
+          "rec": true
+        },
+        {
+          "key": "J",
+          "label": "Barvy 4. úrovně (oklch, color-mix, P3)",
+          "note": "Tailwind 4 a moderní design systémy; zároveň příležitost pro náš „krásný\" příběh.",
+          "rec": true
+        },
+        {
+          "key": "K",
+          "label": "Gradients, shadows, filters, clip-path, mask",
+          "note": "Vizuální kvalita a moderní UI; některé (backdrop-filter) jsou drahé.",
+          "rec": true
+        },
+        {
+          "key": "L",
+          "label": "Scroll-driven animations a view transitions",
+          "note": "Efektní, ale nové a náročné; vhodné až po 0.1."
+        },
+        {
+          "key": "M",
+          "label": "Anchor positioning",
+          "note": "Velmi nové; odložit."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q41",
+      "title": "Selektorový engine: vlastní, nebo hotový?",
+      "why": "Selektory jsou překvapivě složité (specificita, :nth-child s of, :has, shadow scoping) a zároveň kritické pro výkon stylování. `selectors` crate je produkční implementace ze Servo/Firefoxu.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "selectors crate",
+          "note": "Ověřená správnost a výkon, MPL-2.0 závislost. Implementujeme jen rozhraní pro náš DOM.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Vlastní selektorový engine",
+          "note": "Kontrola a možnost optimalizací na míru, ale měsíce práce a snadné chyby ve specificitě."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q42",
+      "title": "Web components (Shadow DOM, custom elements) v 0.1?",
+      "why": "Shadow DOM přináší izolaci stylů a scoped eventy – zásadní pro komponentové knihovny (Lit, Shoelace, FAST), ale komplikuje kaskádu, layout i eventy. Pozor: Speedometer 3.1 shadow DOM vyžaduje, takže pokud ho chceme v 0.1 jako bránu, tato otázka se mění na „musíme\".",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Odložit na 0.2, ale připravit DOM model (shadow root slot v NodeData)",
+          "note": "Neušetříme si místo v datech, ale neučíme se složitost stylů a eventů dřív, než je nutné. Většina korpusu z Q02 ho nepotřebuje.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Základ: open shadow root + custom elements v1 + slotted obsah",
+          "note": "Otevře dveře komponentovým knihovnám. +4–8 týdnů a riziko chyb v kaskádě a eventech."
+        },
+        {
+          "key": "C",
+          "label": "Plná podpora včetně declarative shadow DOM a adoptedStyleSheets",
+          "note": "Nejmodernější, ale výrazně dražší a pro 0.1 přehnané."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q43",
+      "title": "Iframes v 0.1?",
+      "why": "Iframes jsou všude: vkládaná videa, mapy, platební brány, reklamy. Bez nich vypadá část top-100 webů prázdná. Plná izolace (OOPIF) je ale jiná liga.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Základní same-process iframe se samostatným dokumentem",
+          "note": "Vlastní DOM, styl a layout, sdílený proces; sandbox atribut částečně. Pokryje většinu vkládaného obsahu.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "OOPIF (samostatný proces pro iframe) hned",
+          "note": "Bezpečnostně správné, ale vyžaduje multi-proces (Q17) a je to měsíce práce."
+        },
+        {
+          "key": "C",
+          "label": "Žádné iframes v 0.1",
+          "note": "Nejrychlejší, ale část korpusu bude vypadat rozbitě a videa/mapy nebudou fungovat."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q44",
+      "title": "Formulářové prvky v 0.1?",
+      "why": "Formuláře jsou nutné pro Speedometer (inputy, tlačítka) i pro reálné weby. Speedometer navíc používá contenteditable editors, takže „jen input\" nestačí. Potřebujeme textový editing model, focus, validaci a základní widgety (checkbox, radio, select, textarea).",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Vlastní CSS-renderované ovládací prvky + textový editing model",
+          "note": "input/textarea (včetně výběru, kurzoru, IME), button, checkbox, radio, select (základní), validace. Plná kontrola nad vzhledem a konzistencí s layoutem.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Nativní macOS widgety (AppKit)",
+          "note": "Automaticky správné chování a přístupnost, ale vzhled nepůjde stylovat CSS a vzhled bude „cizí\"."
+        },
+        {
+          "key": "C",
+          "label": "Minimum: jen input a button",
+          "note": "Speedometer projde, reálné weby (select, checkbox, textarea) budou rozbité."
+        }
+      ],
+      "other": true
+    }
+  ]
+}

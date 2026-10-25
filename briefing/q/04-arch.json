@@ -1,0 +1,168 @@
+{
+  "section": "arch",
+  "order": 4,
+  "title": "Architektura a hranice systému",
+  "intro": "Tato sekce určuje tvar kódu na několik let. Špatné rozhodnutí tady se nedá dodatečně opravit bez přepsání celého jádra – proto ho řešíme dřív než první řádek kódu.\n\nKlíčový princip: **hranice musí být od začátku připravené na budoucnost, i když je implementace v 0.1 jednoduchá.** Typicky: multi-procesní izolace nemusí být hotová, ale komunikační rozhraní ano.",
+  "questions": [
+    {
+      "id": "Q16",
+      "title": "Jak má vypadat Cargo workspace?",
+      "why": "Rozdělení na crates vynucuje hranice (nedá se snadno obejít API), zrychluje inkrementální build a umožňuje paralelní práci agentů bez konfliktů v jednom souboru.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Jeden workspace, jeden crate na vrstvu",
+          "note": "např. jkva-core, jkva-dom, jkva-style, jkva-layout, jkva-paint, jkva-text, jkva-net, jkva-platform, jkva-js, jkva-shell. Čisté hranice, rychlý build, snadné publikování na crates.io.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Monolitický crate",
+          "note": "Nejrychlejší start, ale po pár měsících neúnosné: dlouhé buildy, žádné vynucené hranice, konflikty při paralelní práci."
+        },
+        {
+          "key": "C",
+          "label": "Vnořené workspaces (jádro / shell / nástroje)",
+          "note": "Užitečné u velkých projektů; pro 0.1 zbytečná režie."
+        },
+        {
+          "key": "D",
+          "label": "Jeden workspace + samostatný „contract\" crate s trait rozhraními",
+          "note": "Varianta A rozšířená o explicitní kontrakty mezi vrstvami. Nejpřesnější hranice, ale víc boilerplate."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q17",
+      "title": "Jaký procesní model má mít 0.1?",
+      "why": "Multi-proces je základ bezpečnosti moderních prohlížečů, ale je to obrovská režie (IPC, sdílená paměť, životní cyklus). Rozhodnutí určuje, zda nás bezpečnostní kritika smete hned, nebo až později.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Jeden proces, více vláken, ale IPC-připravené hranice",
+          "note": "Všechny přechody mezi síťí, rendererem a GPU jdou přes message-passing rozhraní, i když běží ve stejném procesu. V 0.2+ lze vyměnit transport za skutečné procesy bez přepsání logiky.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Skutečný multi-proces od začátku",
+          "note": "Nejbezpečnější, ale od prvního dne řešíme sandbox, sdílenou paměť, pády a ladění. Realisticky +6 měsíců a výrazně vyšší náročnost."
+        },
+        {
+          "key": "C",
+          "label": "Hybrid: samostatné procesy pro síť a GPU, renderer zatím jeden",
+          "note": "Kompromis: síť a GPU jsou přirozeně izolované a snadno se oddělí, renderer zůstává jednoduchý."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q18",
+      "title": "Jaký má být model vláken a plánování?",
+      "why": "Apple Silicon má P-core a E-core s velmi rozdílnými vlastnostmi. Bez explicitního plánování skončí náročná práce na efektivních jádrech a UI trhá. Zároveň příliš mnoho vlastních vláken škodí.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Actor/message-passing s explicitními prioritami a QoS",
+          "note": "Každá vrstva má vlastní doménu a komunikuje zprávami. Priority: Interactive (scroll, input, paint), UserInitiated (layout, JS), Utility (decode, cache), Background (index, GC). Mapuje se na QoS třídy macOS.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Vše na tokio, async/await",
+          "note": "Skvělé pro síť a I/O, ale layout a vykreslování jsou CPU-bound a synchronní – async model jim nesedí a komplikuje determinismus testů."
+        },
+        {
+          "key": "C",
+          "label": "Vlákno na každou starost + kanály",
+          "note": "Jednoduché a předvídatelné, ale špatně se škáluje a snadno vznikne 20 vláken s neznámou prioritou."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q19",
+      "title": "Kdo vlastní event loop?",
+      "why": "Vlastnictví smyčky určuje, jak snadno jde jádro vložit do cizí aplikace a jak testovat deterministicky. Embedder-driven model (jako Servo) je flexibilnější a lépe se testuje.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Embedder řídí smyčku (pump/tick), jádro má vnitřní async",
+          "note": "Shell nebo test zavolá pump() v přesně daných okamžicích. Deterministické testy, snadné vložení do SwiftUI/AppKit aplikace, žádné skryté vlákno.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Jádro vlastní smyčku a spouští ji samo",
+          "note": "Jednodušší pro samostatný shell, ale obtížně se vkládá do cizí aplikace a testuje."
+        },
+        {
+          "key": "C",
+          "label": "Plně async s waker-driven exekutorem",
+          "note": "Moderní, ale pro prohlížečové jádro se složitou fází životního cyklu dokumentu přináší mnoho okrajových stavů."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q20",
+      "title": "Jaké rozhraní pro vkládání (embedding) bude jádro mít?",
+      "why": "Veřejné API je to, co budou používat jiní vývojáři. Špatně navržené API zamrzne na roky. Rust API je přirozené, ale C ABI otevírá dveře Swiftu, C++ a dalším.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Rust API (trait objekty + handle typy), C ABI až po 0.1",
+          "note": "Rychlý vývoj, idiomatické API, žádné unsafe. C ABI se doplní, až bude API stabilní – jinak bychom ho museli měnit dvakrát.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "C ABI od začátku",
+          "note": "Okamžitě použitelné ze Swifta, C++ i Pythonu, ale návrh v C je pomalejší a méně bezpečný; každá změna API bolí."
+        },
+        {
+          "key": "C",
+          "label": "C++ API (jako Blink/WebKit)",
+          "note": "Nejblíž existujícím prohlížečům, ale ztrácíme hlavní výhodu Rustu – bezpečnost na hranicích."
+        },
+        {
+          "key": "D",
+          "label": "Rust API + stabilní C ABI pro malou množinu operací (okno, vstup, životní cyklus)",
+          "note": "Pragmatické: jádro zůstává rustové, ale shell může být nativní. Víc práce než A, ale otevírá iOS/macOS integraci."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q21",
+      "title": "Jak bude vypadat DOM v paměti?",
+      "why": "DOM je nejčastěji přistupovaná struktura v celém jádře. Volba ovlivňuje výkon, bezpečnost i složitost JS bindingů. Rc<RefCell> je pohodlné, ale pomalé a náchylné k panikám; arena je rychlá a předvídatelná.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Generační arena + typované indexy (NodeId s generací)",
+          "note": "Uzly v souvislém bloku, přístup O(1), výborná cache lokalita, snadné uvolnění celé stránky najednou. Generace odhalí use-after-free v debug buildu. Nutné pro výkon a bezpečnost.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Rc<RefCell<Node>>",
+          "note": "Pohodlné a flexibilní, ale každý přístup má runtime kontrolu, cykly unikají a výkon je výrazně horší."
+        },
+        {
+          "key": "C",
+          "label": "Raw pointery se unsafe (styl Chromium)",
+          "note": "Maximální kontrola, ale přesouváme celou bezpečnost na disciplínu vývojářů – přesně to, čemu se chceme vyhnout."
+        }
+      ],
+      "other": true
+    }
+  ]
+}

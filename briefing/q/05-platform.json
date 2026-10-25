@@ -1,0 +1,168 @@
+{
+  "section": "platform",
+  "order": 5,
+  "title": "Apple Silicon, GPU a vlákna",
+  "intro": "Tohle je místo, kde můžeme být objektivně lepší než konkurence. Apple Silicon má unifikovanou paměť (CPU a GPU vidí stejná data), výkonné P-core a úsporné E-core a Metal. Když tomu přizpůsobíme architekturu, získáme výhodu, kterou Chromium ani Gecko jen tak nedoženou – jejich architektura vznikala pro diskrétní GPU a x86.\n\nPozor ale: příliš brzká optimalizace na Metal nás zamkne. Proto jsou otázky níže o tom, kde je integrace přínosem a kde jen rizikem.",
+  "questions": [
+    {
+      "id": "Q22",
+      "title": "Přes jaké API mluvit s GPU?",
+      "why": "Metal přímo = nejnižší režie a plná kontrola, ale kód je nepřenosný a musíme psát vlastní abstrakci. wgpu = přenositelnost, bezpečnější API, aktivní vývoj, ale další vrstva a občas chybějící funkce.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "wgpu (Metal backend) s dokumentovanou únikovou cestou k přímému Metal",
+          "note": "Přenositelné (Linux CI, budoucí Windows/iOS), bezpečné Rust API, WGSL shadery. wgpu 30 je Metal backendem pro Firefox, Servo i Deno, takže cesta je ověřená. Pozor: wgpu vydává breaking verzi každé čtvrtletí – počítej s ~týdnem údržby na major verzi a drž ho za tenkou vlastní abstrakcí. Pro horká místa lze později přidat přímý Metal bez přepsání zbytku.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Přímý Metal přes objc2-metal",
+          "note": "Maximální výkon a kontrola (argument buffers, residency sets, MetalFX). Mnohem víc unsafe kódu a žádná přenositelnost – CI na Linuxu bez GPU."
+        },
+        {
+          "key": "C",
+          "label": "Vlastní tenká abstrakce nad Metalem + CPU fallback",
+          "note": "Nejlepší výkon i přenositelnost, ale abstrakci si musíme napsat a udržovat sami. Realistické až po 0.1."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q22b",
+      "title": "Jak sladit přímý Metal s rasterizérem?",
+      "why": "Q22 zvolil přímý Metal 4, ale Q23 počítal s vellem, které běží na wgpu. Nelze mít obojí bez explicitního rozhodnutí — a je to levné rozhodnout teď, drahé později.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Metal 4 pro kompozici + vello přes wgpu",
+          "note": "Dvě GPU cesty vedle sebe; nejsložitější synchronizace."
+        },
+        {
+          "key": "B",
+          "label": "Metal 4 + vello_cpu (CPU raster)",
+          "note": "Jedna cesta bez wgpu, ale CPU raster je pro 120 Hz a velké stránky riziko."
+        },
+        {
+          "key": "C",
+          "label": "Metal 4 + vlastní GPU rasterizér",
+          "note": "Nejvýkonnější a nejčistší; rasterizér cest, AA a glyfů je měsíce práce navíc. Doporučeno.",
+          "rec": true
+        },
+        {
+          "key": "D",
+          "label": "Přejít na wgpu + vello_gpu",
+          "note": "Jedna cesta, nejrychlejší vývoj; Metal 4 featurury přijdou později."
+        }
+      ],
+      "other": false
+    },
+    {
+      "id": "Q23",
+      "title": "Čím rasterizovat vektory a text?",
+      "why": "Tohle rozhoduje o vizuální kvalitě i výkonu. Vello prošlo v roce 2026 restrukturalizací: `vello` 0.11 je experimentální compute renderer, produkční jsou `vello_gpu` 0.3 (Sparse Strips, běží na wgpu/Metal) a `vello_cpu` 0.3 (nejzralejší, ideální pro CI). Vlastní rasterizér je měsíce práce s nejistým výsledkem. **Pozor:** rozhodnutí Q22b tuto volbu nahrazuje — rasterizér bude vlastní, vello zůstává jen jako referenční srovnání pro testy.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "vello_gpu pro cesty a glyfy + vello_cpu jako fallback pro CI/headless",
+          "note": "Nejrychlejší cesta k „krásnému\" vykreslování: kvalitní AA, GPU akcelerace, aktivní vývoj. `vello_gpu` má nativní GPU rasterizaci glyfů (`Scene::glyph_run`) a atlas; `vello_cpu` dá deterministické screenshot testy bez GPU. Pozor na vazbu na verze wgpu.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Vlastní GPU rasterizér",
+          "note": "Plná kontrola a potenciálně nejlepší výkon, ale je to výzkumný projekt sám o sobě (roky) a odvádí nás od jádra."
+        },
+        {
+          "key": "C",
+          "label": "Nejdřív CPU (vello_cpu), GPU až později",
+          "note": "Nejjednodušší start a snadné testování, ale plynulost 120 Hz a velké stránky na CPU nezvládneme – hrozí, že přepis bude dražší než začít na GPU."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q24",
+      "title": "Budeme explicitně řídit QoS a P/E jádra?",
+      "why": "macOS umí dát vláknu QoS třídu (user-interactive, user-initiated, utility, background). Pokud to neuděláme, systém může naplánovat scroll na E-core a nejde za to. Je to levné a měřitelné.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Ano, každá doména má přiřazenou QoS třídu a prioritu",
+          "note": "Input/scroll/paint = user-interactive; layout a JS = user-initiated; decode a cache = utility; indexace a úklid = background. Měřitelné zlepšení latence a spotřeby.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Nechat rozhodnutí na OS",
+          "note": "Jednodušší, ale nepředvídatelné – přesně to, na co si uživatelé stěžují u konkurence."
+        },
+        {
+          "key": "C",
+          "label": "Vlastní thread pool s affinitou",
+          "note": "Na macOS nemá smysl: affinity není veřejné API a QoS je správný nástroj."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q25",
+      "title": "Kolik „zero-copy\" UMA integrace chceme už v 0.1?",
+      "why": "Sdílená paměť CPU/GPU je největší architektonická výhoda Apple Silicon: data z layoutu mohou jít do GPU bez kopie. Je ale snadné na tom uvíznout – plná zero-copy pipeline je náročná na synchronizaci.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Navrhnout buffery jako sdílené od začátku, implementovat zero-copy tam, kde je to zdarma",
+          "note": "Display list, glyph atlas a velké obrázky půjdou do sdílené paměti; zbytek může kopírovat. Architektura zůstane otevřená, rozsah přiměřený.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Plná zero-copy pipeline v 0.1",
+          "note": "Nejlepší výkon a paměť, ale synchronizace CPU/GPU a životnost bufferů jsou složité; hrozí, že se zdrží celý M2."
+        },
+        {
+          "key": "C",
+          "label": "Řešit až po 0.1",
+          "note": "Jednodušší, ale později to znamená přepis paměťového modelu vykreslování."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q26",
+      "title": "Jaké platformy cílíme v 0.1?",
+      "why": "Každá platforma násobí testovací matici a odhalí jiné chyby. Zároveň potřebujeme levné CI – a to je Linux. Rozumný kompromis: produktově jen macOS arm64, ale jádro nesmí být zamčené na macOS.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "macOS arm64 jako jediný produktový cíl; jádro musí jít zkompilovat a testovat na Linuxu (CI, headless)",
+          "note": "Dostaneme levné a rychlé CI, deterministické screenshot testy bez GPU a přípravu na budoucí porty. Produktově se soustředíme na Mac.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "macOS arm64 + iOS hned",
+          "note": "Dva shelly, dvě sady omezení (sandbox, paměť, žádný JIT v některých režimech). Realisticky +4–6 měsíců."
+        },
+        {
+          "key": "C",
+          "label": "macOS arm64 + macOS x86_64 (Rosetta i nativně)",
+          "note": "Intel Macy jsou na ústupu; udržovat dvě architektury kvůli malé skupině uživatelů nedává smysl."
+        },
+        {
+          "key": "D",
+          "label": "macOS + Linux + Windows od začátku",
+          "note": "Přenositelné jádro je hezké, ale produktová kvalita na třech platformách v jednom roce není reálná."
+        }
+      ],
+      "other": true
+    }
+  ]
+}

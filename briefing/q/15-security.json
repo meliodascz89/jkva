@@ -1,0 +1,125 @@
+{
+  "section": "security",
+  "order": 15,
+  "title": "Bezpečnost, sandbox a soukromí",
+  "intro": "Prohlížečové jádro zpracovává nedůvěryhodný obsah z internetu – je to nejzranitelnější typ software, jaký běžně používáme. Rust nám odstraní celou třídu chyb (buffer overflow, use-after-free), ale ne všechny: zůstávají logické chyby, chyby v sandboxu, úniky dat mezi originy a útoky přes JIT.\n\nV 0.1 nemusíme mít site isolation, ale musíme mít **správný origin model a čisté hranice**, protože ty se dodatečně zavádějí nejhůř.",
+  "questions": [
+    {
+      "id": "Q77",
+      "title": "Origin model, same-origin policy a CORS v 0.1?",
+      "why": "Bez SOP a CORS nejde bezpečně otevřít dva weby v jednom procesu – jeden by mohl číst data druhého. Zároveň je to nutné pro funkčnost moderních API (fetch, cookies, storage).",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Plný origin model + SOP + CORS (preflight, credentials, opaque origins)",
+          "note": "Nutné pro jakýkoli reálný web. Implementace je dobře specifikovaná a testovatelná (WPT).",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Jen SOP bez CORS",
+          "note": "Rychlejší, ale moderní weby komunikující s API na jiné doméně nebudou fungovat."
+        },
+        {
+          "key": "C",
+          "label": "Žádný origin model (dev režim)",
+          "note": "Pouze pro prototypy; v 0.1 nepoužitelné a nebezpečné."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q78",
+      "title": "Jaký sandbox a hardening v 0.1?",
+      "why": "macOS nabízí hardened runtime, App Sandbox a seatbelt profily. Plná izolace procesů je až s multi-procesem (Q17), ale hardening kompilace a entitlements jdou udělat hned a jsou levné.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Hardened runtime + JIT entitlement + připravené seatbelt profily pro budoucí procesy",
+          "note": "Reálná úroveň ochrany bez multi-procesu; příprava na 0.2, kdy půjde síť/GPU do vlastních procesů.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Plný App Sandbox od začátku",
+          "note": "Nejbezpečnější a nutné pro Mac App Store, ale omezuje přístup k souborům a komplikuje vývoj; pro vývojářský nástroj v 0.1 zbytečné."
+        },
+        {
+          "key": "C",
+          "label": "Bez hardeningu, jen Rust safety",
+          "note": "Nejrychlejší, ale u jádra, které zpracovává cizí obsah, to není obhajitelné."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q79",
+      "title": "Content Security Policy v 0.1?",
+      "why": "CSP je hlavní obrana proti XSS a dnes ho používá většina velkých webů. Plná úroveň 3 je složitá; základní úroveň 2 pokryje většinu reálných hlaviček.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "CSP Level 2 subset + report-only mód + nonce/hash",
+          "note": "Pokryje reálné weby a je testovatelné. Level 3 (trusted types, strict-dynamic detaily) později.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Plná CSP Level 3",
+          "note": "Nejlepší ochrana, ale výrazně víc práce a okrajových případů."
+        },
+        {
+          "key": "C",
+          "label": "Žádná CSP",
+          "note": "Jednodušší, ale weby s CSP se mohou chovat jinak a bezpečnostní příběh bude slabý."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q80",
+      "title": "Které bezpečnostní praktiky budou povinné od prvního commitu?",
+      "why": "Dodatečné zavádění fuzzingu a supply-chain kontrol je drahé a často se odkládá navždy. Přitom jde o hodiny až dny práce, které zachytí chyby dřív, než se dostanou do mainu.",
+      "type": "multi",
+      "options": [
+        {
+          "key": "A",
+          "label": "cargo-deny (licence, duplicity, zranitelnosti) v CI",
+          "note": "Levné a okamžitě užitečné.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "cargo-vet / audit závislostí",
+          "note": "Pro prohlížečové jádro s desítkami závislostí rozumné; lze zavést postupně."
+        },
+        {
+          "key": "C",
+          "label": "Miri pro všechny unsafe bloky",
+          "note": "Odhalí undefined behavior v našem unsafe kódu (GPU/FFI); pomalé, ale běží jen na části testů.",
+          "rec": true
+        },
+        {
+          "key": "D",
+          "label": "cargo-fuzz na parser a layout (24h běh v CI/nightly)",
+          "note": "Nejlepší investice do robustness parsingu a layoutu.",
+          "rec": true
+        },
+        {
+          "key": "E",
+          "label": "AddressSanitizer/UBSan build v CI",
+          "note": "Užitečné hlavně pro FFI a C++ závislosti (V8); náročné na čas CI."
+        },
+        {
+          "key": "F",
+          "label": "Povinné review u změn v bezpečnostně citlivých crates",
+          "note": "Procesní opatření; v agentním vývoji obzvlášť důležité."
+        }
+      ],
+      "other": true
+    }
+  ]
+}

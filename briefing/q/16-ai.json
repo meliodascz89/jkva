@@ -1,0 +1,83 @@
+{
+  "section": "ai",
+  "order": 16,
+  "title": "AI a agentní vrstva",
+  "intro": "Z výzkumu i z praxe (Chrome/Gemini, Edge/Copilot, Huawei Web Agent) plyne jasné doporučení: **AI inference nepatří do jádra.** Jádro má zůstat „hloupé a extrémně rychlé\" – a místo modelů nabídnout strukturovaný, sémantický popis stránky a bezpečné akční API. Veškerá inteligence, modely a orchestrace patří do vrstvy prohlížeče nebo do samostatného procesu.\n\nTo ale neznamená, že AI ignorujeme. Znamená to, že ji **navrhneme jako rozhraní hned**, protože dodatečné „vykuchání\" sémantiky z hotového jádra je drahé a nepřesné.",
+  "questions": [
+    {
+      "id": "Q81",
+      "title": "Kde je hranice mezi jádrem a AI?",
+      "why": "Pokud AI runtime vstoupí do jádra, přinese obrovské nároky na paměť, nestabilní latenci a bezpečnostní rizika (prompt injection) přímo do cesty kritické pro vykreslování. Pokud naopak jádro neumí vydat sémantiku, AI vrstva bude „koukat na screenshoty\" – drahé a nespolehlivé.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Jádro exportuje sémantický strom + akční API; AI runtime žije výš",
+          "note": "Jádro dodá role, jména, souřadnice, stav interaktivity a stabilní ID; AI vrstva (nebo samostatný proces) nad ním plánuje a volá akce. Čistá hranice, testovatelné, bezpečné.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "AI inference přímo v jádře",
+          "note": "Nejjednodušší integrace pro uživatele, ale modely žerou RAM, blokují práci s pamětí a přinášejí bezpečnostní rizika. Nedoporučuji."
+        },
+        {
+          "key": "C",
+          "label": "Samostatný AI sidecar proces s protokolem (MCP-like)",
+          "note": "Nejbezpečnější a nejflexibilnější, ale vyžaduje IPC a složitější distribuci. Dobrá varianta pro 0.2+."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q82",
+      "title": "V jakém formátu má jádro vydávat stránku pro AI?",
+      "why": "Tohle je náš „Annotated Page Content\". Pokud ho navrhneme dobře, ušetří AI vrstvě tisíce tokenů a umožní spolehlivé akce. Pokud špatně, nikdo ho nepoužije.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "JSON schema: uzly s ID, rolí, jménem, bounding boxem, stavem, textem + seznam dostupných akcí",
+          "note": "Kompaktní, stabilní ID přežívají mezi snímky, souřadnice umožňují fallback na kliknutí myší. Doporučeno.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Jen accessibility tree",
+          "note": "Standardizované a levné, ale chybí geometrie a vizuální kontext; AI hůř chápe layout."
+        },
+        {
+          "key": "C",
+          "label": "HTML snapshot / DOM dump",
+          "note": "Nejjednodušší, ale obrovské tokeny, nestabilní a plné šumu. Přesně to, čemu se moderní AI prohlížeče vyhýbají."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q83",
+      "title": "Kolik AI chceme v 0.1?",
+      "why": "AI je lákavá, ale odvádí od jádra. Rozumné je dodat rozhraní a nechat integraci na 0.2 – pokud ale chceš AI demo kvůli publicitě, musíme s ním počítat v milnících.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Jen návrh a export API (sémantický strom, akce), žádné modely",
+          "note": "Jádro zůstává čisté, AI vrstva může vzniknout kdykoli potom. Doporučeno.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "A + demo agent nad jádrem (mimo repo jádra)",
+          "note": "Skvělá ukázka a marketing, ale je to samostatný projekt; musíme ho od jádra oddělit, aby nezdržoval."
+        },
+        {
+          "key": "C",
+          "label": "Plná lokální AI integrace (Core ML / MLX)",
+          "note": "Velmi atraktivní na Apple Silicon, ale je to jiný projekt s jinými riziky (paměť, modely, soukromí)."
+        }
+      ],
+      "other": true
+    }
+  ]
+}

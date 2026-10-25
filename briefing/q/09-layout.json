@@ -1,0 +1,158 @@
+{
+  "section": "layout",
+  "order": 9,
+  "title": "Layout engine",
+  "intro": "Layout je skutečné know-how renderovacího jádra – a zároveň to, co se nedá koupit jako hotová knihovna. Flexbox a grid dnes umí taffy (produkčně používaný), ale blokový a inline layout s textem, floaty, tabulkami a scroll kontexty si musíme napsat sami.\n\nNejvětší riziko není algoritmus, ale **inkrementalita**: pokud po každé změně přepočítáme celou stránku, Speedometer ani scroll na velkých webech nezvládneme.",
+  "questions": [
+    {
+      "id": "Q45",
+      "title": "Jak rozdělit práci na layoutu?",
+      "why": "Psát flexbox a grid od nuly je měsíce a výsledek bude dlouho horší než taffy. Naopak blokový a inline layout s textem taffy neumí – tam je naše IP nevyhnutelná.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Hybrid: taffy pro flexbox a grid, vlastní blokový/inline/float/table layout",
+          "note": "Nejrychlejší cesta ke správnému flexu a gridu. Taffy 0.15 umí flex, grid i základní blok a float, ale ne inline layout, text, ani tabulky – ty zůstávají na nás. Jádro layoutu (text, řádkování, tabulky, scroll) je naše IP.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Vše vlastní včetně flexboxu a gridu",
+          "note": "Plná kontrola a jednotný kód, ale realisticky +6 měsíců a vysoké riziko chyb v méně častých kombinacích."
+        },
+        {
+          "key": "C",
+          "label": "Taffy pro vše, co umí, zbytek obejít",
+          "note": "Nejrychlejší, ale blokový a inline layout obejít nelze – text a dokumentový tok jsou jádro webu. Taffy navíc neumí tabulky ani inline obsah."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q46",
+      "title": "Tabulky v 0.1?",
+      "why": "Tabulkový layout je historicky nejhorší část každého jádra (auto layout, colspan/rowspan, border-collapse). Na moderních webech se používá hlavně pro data, ne pro layout – ale dokumentace, e-shopy a e-maily ho používají pořád.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Základní tabulkový layout (auto + fixed, colspan/rowspan, border-collapse)",
+          "note": "Pokryje datové tabulky, které tvoří většinu reálného výskytu. Plná specifikace (separated borders, složité šířky) až později.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Odložit na 0.2",
+          "note": "Ušetří 3–5 týdnů, ale tabulky se rozpadnou na mnoha webech a v dokumentaci."
+        },
+        {
+          "key": "C",
+          "label": "Plná implementace podle specifikace",
+          "note": "Nejlepší výsledek, ale je to jeden z nejnáročnějších algoritmů v CSS a v 0.1 se nevyplatí."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q47",
+      "title": "Floaty a clear v 0.1?",
+      "why": "Floaty jsou „legacy\", ale pořád je používá mnoho webů a knihoven. Jejich implementace je středně náročná a ovlivňuje skoro celý blokový layout.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Základní floaty a clear (left/right, clear both, BFC)",
+          "note": "Pokryje většinu reálného výskytu; složité kombinace s margin collapsing lze doladit později.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Odložit",
+          "note": "Ušetří čas, ale část starších webů a e-mailových šablon se rozsype."
+        },
+        {
+          "key": "C",
+          "label": "Plná specifikace včetně všech okrajových případů",
+          "note": "Drahé a málo používané."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q48",
+      "title": "Inkrementální layout od začátku, nebo nejdřív plný přepočet?",
+      "why": "Tohle rozhoduje o tom, zda Speedometer a scroll vůbec mohou být konkurenceschopné. Plný přepočet celé stránky při každé změně je jednoduchý, ale u velkých dokumentů neúnosný. Dodatečná inkrementalita znamená přepsat celý layout.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Inkrementální od začátku: dirty subtree + invalidační fronty",
+          "note": "Změna stylu nebo DOMu označí jen dotčené podstromy; layout přepočítá potřebné minimum. Náročnější návrh, ale jediná cesta k výkonu.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Nejdřív plný přepočet, inkrementalita v M4",
+          "note": "Rychlejší první výsledky, ale hrozí, že se přepis nestihne a výkon zůstane špatný."
+        },
+        {
+          "key": "C",
+          "label": "Plný přepočet natrvalo",
+          "note": "Nejjednodušší, ale s velkými dokumenty a animacemi nekonkurenceschopné."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q49",
+      "title": "Paralelizace layoutu?",
+      "why": "Layout lze počítat paralelně po nezávislých podstromech, ale synchronizace a sdílené styly to komplikují. Apple Silicon má 4–6 P-core, takže potenciál je velký – ale až po funkčním základu.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Layout běží na vlastním vlákně dokumentu; vnitřní paralelizace až po 0.1",
+          "note": "Oddělení od UI vlákna je nutné hned (jinak trhá scroll). Vnitřní dělení podstromů přidáme, až bude layout stabilní a bude co měřit.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Rayon a paralelní podstromy hned",
+          "note": "Potenciálně velký zisk, ale v rané fázi přináší nedeterminismus a těžko se ladí."
+        },
+        {
+          "key": "C",
+          "label": "Vše na jednom vlákně",
+          "note": "Nejjednodušší, ale scroll a animace budou trhat při každém layoutu."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q50",
+      "title": "Scroll kontexty, sticky a writing modes?",
+      "why": "Moderní weby stojí na vnořených scroll kontejnerech (overflow: auto), sticky hlavičkách a fixed prvcích. Vertikální psaní a plné bidi jsou naopak vzácné a drahé.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Plné scroll kontejnery, sticky, fixed, scroll anchoring; jen horizontal-tb (LTR/RTL text přes shaping)",
+          "note": "Pokryje naprostou většinu webů. RTL text se správně vykreslí, ale RTL layout stránky a vertikální psaní přijdou později.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "I vertikální writing modes a plný bidi layout",
+          "note": "Pokryje japonštinu/arabštinu na úrovni layoutu, ale je to samostatný projekt a pro český/anglický korpus zbytečný."
+        },
+        {
+          "key": "C",
+          "label": "Jen scroll celého dokumentu, bez vnořených kontejnerů",
+          "note": "Nejjednodušší, ale mnoho moderních aplikací (dashboardy, modaly) se rozbije."
+        }
+      ],
+      "other": true
+    }
+  ]
+}

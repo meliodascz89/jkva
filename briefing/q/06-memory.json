@@ -1,0 +1,113 @@
+{
+  "section": "memory",
+  "order": 6,
+  "title": "Paměťová strategie",
+  "intro": "Paměť je náš hlavní slib (Q03/Q04). Chromium je známé tím, že „sežere\" RAM s mnoha kartami; Safari je na Macu výrazně úspornější, ale ne dokonalé. Rust nám dává nástroje, které C++ nemá: areny, striktní vlastnictví a absenci skrytých alokací.\n\nPozor na měření: „spotřeba paměti\" není jedno číslo. Rozlišujeme RSS (rezidentní paměť), footprint (fyzicky použité stránky), dirty pages a špičkovou alokaci. V briefingu budeme vždy uvádět, kterou metriku myslíme.",
+  "questions": [
+    {
+      "id": "Q27",
+      "title": "Jaký globální alokátor?",
+      "why": "Globální alokátor ovlivňuje fragmentaci, rychlost přidělování i to, jak moc „nafouknutá\" paměť vypadá v Activity Monitoru. U jádra s arenami je jeho role menší, ale pořád rozhoduje o špičkách.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Systémový malloc (Apple)",
+          "note": "Nejlepší spolupráce s macOS (footprint, komprese paměti, malloc zóny), žádná další závislost. Dobrý výchozí bod, když většinu práce stejně dělají areny.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "mimalloc",
+          "note": "Rychlý, nízká fragmentace, dobré výsledky v serverech. Na macOS může hůř sedět s kompresí paměti a měřením footprintu."
+        },
+        {
+          "key": "C",
+          "label": "jemalloc",
+          "note": "Kvalitní a předvídatelný, ale velký a na macOS spíš neobvyklý; výhody se projeví hlavně u fragmentace dlouho běžících procesů."
+        },
+        {
+          "key": "D",
+          "label": "Vlastní alokátor s arenami jako primární strategií",
+          "note": "Nejlepší kontrola a nejnižší režie, ale je to samostatný projekt s vysokým rizikem chyb. Vhodné až po 0.1."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q28",
+      "title": "Jak budou fungovat areny?",
+      "why": "Arena je největší paměťová výhra: místo tisíce malých alokací uděláme jednu velkou a celou ji uvolníme najednou. U prohlížeče to sedí na životní cyklus dokumentu a snímku.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Arena na dokument (reset při navigaci) + efemérní arena na snímek (layout/paint)",
+          "note": "Dokument drží DOM, styl a layout strom; snímková arena drží dočasné výpočty a display list. Uvolnění je O(1), fragmentace minimální.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Jen arena na dokument, zbytek běžné alokace",
+          "note": "Jednodušší, ale snímkové alokace (layout, display list) budou tvořit špičky a fragmentaci."
+        },
+        {
+          "key": "C",
+          "label": "Bez aren, spoléhat na Rc/Box",
+          "note": "Nejjednodušší, ale přesně tímto způsobem vzniká „Chrome žere RAM\"."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q29",
+      "title": "Budeme mít tvrdý paměťový rozpočet na dokument?",
+      "why": "Bez limitu roste paměť s každou otevřenou stránkou a špatně napsaným webem. Soft cap s evikcí (obrázky, cache, bfcache) udrží jádro předvídatelné a je to přímý důkaz našeho slibu.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Soft cap na dokument + evikce + diagnostika",
+          "note": "např. 256 MB na dokument: při překročení se uvolní dekódované obrázky, bfcache a cache, ale stránka nespadne. Metriky se hlásí do dev overlaye a benchmarků.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Bez limitu",
+          "note": "Jednodušší, ale neumíme garantovat nic a benchmarky paměti budou nepředvídatelné."
+        },
+        {
+          "key": "C",
+          "label": "Tvrdý limit s ukončením dokumentu",
+          "note": "Rozhodné, ale uživatelsky nepříjemné (bílá stránka) a těžko se ladí."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q30",
+      "title": "Které cache a zálohy chceme už v 0.1?",
+      "why": "bfcache (rychlý návrat zpět) výrazně zlepšuje vnímanou rychlost, ale drží celé dokumenty v paměti – jde proti našemu slibu. Obrázková cache je naopak nutná pro plynulost. Rozhodnutí musí být explicitní.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "bfcache pro 1–2 dokumenty + rozpočet na dekódované obrázky",
+          "note": "Zpět/vpřed je okamžité, paměť zůstává pod kontrolou díky capu z Q29. Obrázky se drží dekódované v limitu a jinak se re-dekódují.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Jen obrázková cache, bfcache až po 0.1",
+          "note": "Nejnižší paměť, ale zpět/vpřed bude pomalé a uživatelsky znát."
+        },
+        {
+          "key": "C",
+          "label": "Žádné cache",
+          "note": "Nejnižší paměť a nejjednodušší, ale plynulost a vnímaná rychlost budou špatné."
+        }
+      ],
+      "other": true
+    }
+  ]
+}

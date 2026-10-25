@@ -1,0 +1,173 @@
+{
+  "section": "realita",
+  "order": 2,
+  "title": "Realita, ambice a časový horizont",
+  "intro": "Tato sekce je nepříjemná, ale musí být první. Ověřená čísla z podzimu 2026: **Ladybird** má po 7,3 letech ~1,19 milionu řádků jádra (LibWeb ~830 tis., LibJS ~357 tis.), financování od Cloudflare, Shopify a FUTO – a jeho alpha stále není vydaná; Speedometer 3 má ~5,9. **Servo** má ~544 tis. řádků Rustu, 14,7 roku vývoje a 30 maintainerů, z toho jednoho částečně placeného. **Blitz** – nejbližší analog naší architektury (Stylo + Taffy + Parley + Vello) – má po 2,5 letech seriózní práce ~68–80 tis. řádků, grant od NLnet, a **stále nemá JavaScript**, `overflow: auto`, `position: sticky` ani skutečné tabulky (emuluje je gridem).\n\nTo neznamená, že to nemá smysl. Znamená to, že v0.1 musí být **ostře vymezený řez**, ne „všechno\". Tato sekce určuje, jak hluboký řez to bude, kolik na něj máme času a co se stane, když se nestíhá.",
+  "questions": [
+    {
+      "id": "Q07",
+      "title": "Jakou úroveň ambice má v0.1 mít?",
+      "why": "Toto je nejdůležitější otázka celého briefingu. Určuje, zda je 0.1 za 6 měsíců, za rok, nebo za dva – a co v ní bude chybět. „Použitelné jádro\" je doporučená střední cesta: měřitelný výsledek, který není polotovar.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Statické jádro (≈ 6–8 měsíců, 50–70 tis. řádků)",
+          "note": "Vykreslí kurátorovaný korpus statických webů: HTML, CSS, blokový a inline layout, flex, obrázky, fonty, scroll. Bez JavaScriptu, formulářů, iframe a skutečných tabulek. Přesně velikost, na které je Blitz po 2,5 letech.",
+          "rec": false
+        },
+        {
+          "key": "B",
+          "label": "Statické jádro + JS (≈ 12 měsíců, 120–160 tis. řádků)",
+          "note": "Navíc: V8 + DOM bindingy + event loop + fetch + základní formuláře + timing. Stále bez Shadow DOM, iframe, plných tabulek a bidi. Toto je nejbližší realistická podoba „použitelného jádra\" a doporučená varianta.",
+          "rec": true
+        },
+        {
+          "key": "C",
+          "label": "Browser-grade jádro (24+ měsíců, 250–350 tis. řádků)",
+          "note": "Navíc: tabulky podle specifikace, floaty, bidi, Shadow DOM, navigace a historie, multi-proces, média, DevTools, přístupnost. Reálné, ale je to jiný projekt a jiný plán.",
+          "rec": false
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q08",
+      "title": "Jaký je tvrdý časový horizont do 0.1.0?",
+      "why": "Horizont určuje, kolik funkcí se stihne a jak agresivně se musí řezat. Bez data se projekt nikdy „nedokončí\", protože vždy půjde přidat další standard.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "6 měsíců – jen statické vykreslování",
+          "note": "Odpovídá variantě A v Q07. Stihne se vizuálně působivé demo, ale bez JS to není jádro pro weby, které dnes lidé používají.",
+          "rec": false
+        },
+        {
+          "key": "B",
+          "label": "9 měsíců – statické jádro + začátek JS",
+          "note": "Reálně dosažitelné jen s tvrdým řezem: JS bindingy hotové, ale bez formulářů a bez tabulek. Vhodné, pokud chceš ukázat výsledek dřív a zbytek dodělávat za pochodu.",
+          "rec": false
+        },
+        {
+          "key": "C",
+          "label": "12 měsíců – statické jádro + JS (doporučeno)",
+          "note": "Odpovídá variantě B v Q07. Zahrnuje jednu vlnu „skoro hotovo\" a jednu vlnu stabilizace, testování a dokumentace.",
+          "rec": true
+        },
+        {
+          "key": "D",
+          "label": "18–24 měsíců – browser-grade",
+          "note": "Odpovídá variantě C v Q07. Rozsah jako malý prohlížeč, ne jen jádro. Nejvyšší kvalita, nejdelší cesta k prvnímu výsledku.",
+          "rec": false
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q07b",
+      "title": "Jak dosáhnout cíle při maximálním rozsahu?",
+      "why": "Součet voleb (vlastní rasterizér, OOPIF, multi-proces, video, WebGL/WebGPU, WebRTC, Service Workers, VoiceOver) odpovídá rozsahu celého prohlížeče — realisticky 400–450 tis. řádků. Čtyři agenti to za 24 měsíců nezvládnou; tato otázka rozhoduje, čím to vyřešíme.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Víc agentů (8–12) + paralelní moduly",
+          "note": "Zkrácení na ~24–30 měsíců; moduly jsou oddělitelné. Lead se stává úzkým hrdlem review."
+        },
+        {
+          "key": "B",
+          "label": "Prodloužit horizont na 36–48 měsíců",
+          "note": "Zachová rozsah i kvalitu; první demo později, ale bez přehlcení týmu. Doporučeno.",
+          "rec": true
+        },
+        {
+          "key": "C",
+          "label": "Ponechat 24 měsíců, těžké API do 0.5",
+          "note": "WebRTC, Service Workers, video, WebGL a VoiceOver až v navazující verzi."
+        },
+        {
+          "key": "D",
+          "label": "Rozhodnout po M2 podle naměřené rychlosti",
+          "note": "Odložené rozhodnutí; riskantní pro plánování a nábor agentů."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q09",
+      "title": "Souhlasíš s tímto členěním na milníky M0–M5?",
+      "why": "Milníky jsou veřejný závazek a zároveň nástroj řízení. Každý má být demonstrovatelný (screenshot, benchmark, test) – ne „hotovo v hlavě\".",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Ano, M0–M5 jak jsou navrženy",
+          "note": "M0 (týdny 0–2): repo, CI, workspace, dokumentace, ADR, první trojúhelník přes vello. M1 (3–8): HTML→DOM→CSS→blokový/inline layout→text, screenshot a WPT harness od prvního týdne. M2 (9–16): flex, obrázky, barvy, scroll, hit-testing, vrstvy, stacking contexts. M3 (17–24): V8 + DOM bindingy + fetch + event loop + formuláře, interaktivní appky. M4 (25–34): korpus, inkrementální invalidace, výkon, paměť, benchmark brány. M5 (35–44): dokumentace EN+CS, 0.1.0, demo, blog.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Míň milníků (3–4)",
+          "note": "Jednodušší řízení, ale delší doba bez viditelného výsledku a větší riziko, že se chyba objeví pozdě."
+        },
+        {
+          "key": "C",
+          "label": "Víc, jemnějších milníků (8–10)",
+          "note": "Lepší přehled a častější dema, ale víc režie a riziko, že se milníky stanou administrativou."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q10",
+      "title": "Co se má řezat jako první, když se nestíhá?",
+      "why": "Rozhodnout se předem je mnohem levnější než rozhodovat ve stresu. Doporučené pořadí je od nejméně používaného k nejdůležitějšímu – tak, aby každý řez ublížil co nejméně reálným webům.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Předem odsouhlasené pořadí: tabulky → floaty → iframes → Shadow DOM → animace → workers → Wasm",
+          "note": "Tabulky a floaty jsou vzácné na moderních webech; animace a workers se dají dohnat po 0.1. Wasm je drahý a pro Speedometer nepotřebný.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Rozhodovat ad hoc podle situace",
+          "note": "Flexibilnější, ale v praxi to znamená, že se řeže to, co zrovna bolí, ne to, co je nejméně důležité."
+        },
+        {
+          "key": "C",
+          "label": "Neřezat, prodloužit termín",
+          "note": "Nejlepší kvalita, ale hrozí, že se termín posune opakovaně a projekt ztratí tah."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q11",
+      "title": "Šířka, nebo hloubka?",
+      "why": "U omezeného času jde buď pokrýt víc webů „dost dobře\", nebo méně webů „perfektně\". Tato volba se promítá do každého rozhodnutí o CSS a layoutu.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Šířka: víc webů vypadá správně, i s drobnými chybami",
+          "note": "Lepší dojem při procházení korpusu a lepší příběh („funguje na 70 z top-100\"). Vyžaduje tolerantní fallbacky v CSS a layoutu.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Hloubka: méně webů perfektně, zbytek odmítnout",
+          "note": "Lepší technická kvalita a čistší kód, ale veřejnost to bude vnímat jako nefunkční jádro."
+        },
+        {
+          "key": "C",
+          "label": "Vyváženě podle korpusu z Q02",
+          "note": "Rozumné, ale v praxi to znamená explicitní seznam „must pass\" a „best effort\" stránek – což je vlastně varianta A s lepší dokumentací."
+        }
+      ],
+      "other": true
+    }
+  ]
+}

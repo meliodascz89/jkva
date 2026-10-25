@@ -1,0 +1,215 @@
+{
+  "section": "produkt",
+  "order": 1,
+  "title": "Produkt, korpus a měřítko úspěchu",
+  "intro": "Než vznikne první řádek kódu, musíme zamknout, co je vlastně produkt, na jakém korpusu webů se bude poměřovat a co znamená „překonat nejlepší\". Bez toho se projekt rozpadne na nekonečný výzkum, protože každý týden půjde definovat „ještě jeden standard\".\n\nTato sekce rozhoduje o 30–50 % celkového rozsahu práce. Odpověz prosím i tehdy, když si nejsi jistý – u každé otázky je označená doporučená varianta, kterou umím obhájit.",
+  "questions": [
+    {
+      "id": "Q01",
+      "title": "Co je výstupem verze 0.1?",
+      "why": "Jádro bez shellu se nedá předvést, změřit na reálných webech ani ukázat veřejnosti. Plnohodnotný prohlížeč je ale samostatný projekt, který v tomto projektu neřešíme – vyvíjíme jen JKva a tenký demo shell.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Knihovna (Rust crates) + referenční minimální shell",
+          "note": "Shell = jedno okno, adresní řádek, zpět/vpřed, reload, dev overlay. Slouží k demu, benchmarkům a screencastům; jádro zůstává čistě knihovna s veřejným API. Není to začátek budoucího prohlížeče.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Pouze knihovna/crates, bez shellu",
+          "note": "Nejmenší rozsah, ale nemáme co ukázat veřejnosti ani jak měřit reálné weby a plynulost scrollu."
+        },
+        {
+          "key": "C",
+          "label": "Plnohodnotný prohlížeč (jádro + browser UI)",
+          "note": "Taby, historie, stahování, nastavení, rozšíření, aktualizace. Minimálně 2–3× větší rozsah a úplně jiný typ práce (UI, produkt, podpora)."
+        },
+        {
+          "key": "D",
+          "label": "Headless engine pro automatizaci a AI agenty",
+          "note": "Bez UI, API pro řízení a extrakci obsahu. Zajímavé a komerčně cenné, ale vizuální kvalitu ani plynulost na tom neprokážeme."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q02",
+      "title": "Jaký korpus webů musí v0.1 vykreslit správně?",
+      "why": "Korpus je definice „hotovo\". Čím širší, tím víc okrajových případů – a tím později je verze hotová. Doporučuji kombinaci, která pokrývá reálné weby i benchmarky.",
+      "type": "multi",
+      "options": [
+        {
+          "key": "A",
+          "label": "Top-100 webů podle Tranco",
+          "note": "Statické vykreslení + porovnání screenshotů se Safari/Chromem. Uzavřený, měřitelný cíl a silná demonstrace.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Top-1000 webů",
+          "note": "Odhalí výrazně víc okrajových případů, ale každá další stovka je drahá. Vhodné jako cíl pro 0.3+, ne pro 0.1."
+        },
+        {
+          "key": "C",
+          "label": "20 interaktivních aplikací (React/Vue/Svelte/Angular)",
+          "note": "Todo, dashboard, tabulka s filtrováním. Přesně to, co měří Speedometer – bez toho benchmark neodpovídá realitě.",
+          "rec": true
+        },
+        {
+          "key": "D",
+          "label": "Dokumentační a long-form weby (MDN, RFC, Wikipedie)",
+          "note": "Text, kotvy, tabulky, bloky kódu, dlouhé stránky, scroll. Nejlepší test typografie a layoutu.",
+          "rec": true
+        },
+        {
+          "key": "E",
+          "label": "E-shopy a formulářové vzory",
+          "note": "Formuláře, validace, tabulky, obrázky, košík. Náročné na formulářové prvky a přístupnost."
+        },
+        {
+          "key": "F",
+          "label": "Zpravodajské servery",
+          "note": "Obrázky, lazy-loading, reklamní skripty, časté reflow. Bez reklam je to hlavně test obrázků a textu."
+        },
+        {
+          "key": "G",
+          "label": "Vlastní „dream corpus\" definovaný později",
+          "note": "Riziko posouvání cíle: korpus, který se mění podle toho, co zrovna funguje, není definice hotového."
+        },
+        {
+          "key": "H",
+          "label": "Umělé micro-benchmarky (Speedometer workloads)",
+          "note": "Nutné pro měření regresí v CI, ale samotné nedokazují, že jádro umí reálný web.",
+          "rec": true
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q03",
+      "title": "Která veřejná tvrzení o výkonu budeme smět říkat?",
+      "why": "Tvrzení musí být obhajitelné měřením, jinak projekt ztratí důvěryhodnost u vývojářů. Tato otázka určuje, co půjde do README a na web – a tedy co musíme skutečně změřit.",
+      "type": "multi",
+      "options": [
+        {
+          "key": "A",
+          "label": "Nižší paměť na kartu než Chrome/Safari",
+          "note": "Naše nejsilnější a nejlépe měřitelná výhoda díky Rustu, arenové alokaci a UMA na Apple Silicon.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Nižší spotřeba energie při scrollu a videu",
+          "note": "Měřitelné přes powermetrics; přesně to, na co si uživatelé stěžují u Firefoxu na Macu.",
+          "rec": true
+        },
+        {
+          "key": "C",
+          "label": "Rychlejší studený start a first paint",
+          "note": "Měřitelné a snadno pochopitelné; nové jádro bez 15 let historie má reálnou šanci.",
+          "rec": true
+        },
+        {
+          "key": "D",
+          "label": "Vyšší vizuální věrnost (barvy, AA, 120 Hz)",
+          "note": "Subjektivní část je potřeba podložit metrikami (deltaE, SSIM proti referenčnímu renderu, frame pacing).",
+          "rec": true
+        },
+        {
+          "key": "E",
+          "label": "Skóre v benchmarku – cíl parita, ne vítězství",
+          "note": "Speedometer měří i JavaScript. S SpiderMonkey máme stejný základ jako Firefox, takže rozdíl bude náš layout, styl a paint. Reálně: Safari 26.2 na M2 dává 41,9, Chrome 42,7, Firefox 35,7; Ladybird po 7 letech ~5,9. Cíl pro 0.1 je „projde a změří se\", ne vítězství.",
+          "rec": true
+        },
+        {
+          "key": "F",
+          "label": "Žádná veřejná tvrzení v 0.1, jen interní měření",
+          "note": "Bezpečné, ale veřejný projekt potřebuje něco, čím zaujme. Tvrzení jde zveřejnit později."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q04",
+      "title": "Jaká je vlajková věta projektu (jedna, do README)?",
+      "why": "Jedna věta určuje priority při každém sporu o rozsah. Pokud je vlajkou paměť, nebudeme plýtvat na funkce, které žerou RAM. Pokud je to vizuální kvalita, nebudeme optimalizovat každou alokaci.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Nejnižší paměť na kartu mezi moderními jádry",
+          "note": "Nejlépe obhajitelné, snadno měřitelné, silný příběh pro Apple Silicon."
+        },
+        {
+          "key": "B",
+          "label": "Nejplynulejší scroll a animace na 120 Hz",
+          "note": "Krásné demo, ale těžko se dokazuje proti Safari, které je na Macu extrémně dobře optimalizované."
+        },
+        {
+          "key": "C",
+          "label": "Nejrychlejší studený start a první vykreslení",
+          "note": "Měřitelné a užitečné, ale méně „sexy\" než paměť nebo kvalita."
+        },
+        {
+          "key": "D",
+          "label": "Nejvěrnější barvy a text na Apple Silicon",
+          "note": "Dobře ladí s požadavkem „krásné vykreslování\"; konkurence tu má rezervy (P3, HDR, font smoothing)."
+        },
+        {
+          "key": "E",
+          "label": "Špičková vizuální kvalita při poloviční paměti",
+          "note": "Kombinace dvou výše uvedených – nejzajímavější příběh, ale musíme umět obojí změřit.",
+          "rec": true
+        },
+        {
+          "key": "F",
+          "label": "Žádná vlajka – jsme výzkumná laboratoř",
+          "note": "Otevřeně přiznaný výzkum; méně tlaku na výsledky, menší šance zaujmout přispěvatele."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q05",
+      "title": "Potvrzuješ, že těchto 12 věcí je vědomě mimo 0.1?",
+      "why": "Explicitní seznam „tohle neděláme\" je stejně důležitý jako seznam funkcí. Brání tomu, aby se rozsah tiše nafoukl. Pokud některou chceš už v 0.1, označ B a napiš kterou.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Ano, všech 12 je mimo 0.1",
+          "note": "Rozšíření (adblock, password managery) · synchronizace a účty · správce hesel · tisk a PDF export · DRM (Widevine/FairPlay) · DevTools UI · AI inference uvnitř jádra · multi-procesní izolace · mobilní shell (iOS) · plná accessibility · lokalizace UI · automatické aktualizace.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Ne, některé chci už v 0.1",
+          "note": "Napiš které a proč – přepočítáme milníky a rozpočet."
+        }
+      ],
+      "other": false
+    },
+    {
+      "id": "Q06",
+      "title": "Potvrzuješ název JKva a rozdělení projektů?",
+      "why": "Název jde do názvů cratů na crates.io, do GitHubu, domény a binárek. Zároveň platí, že tento projekt dodává jen jádro; prohlížeč je samostatný pozdější projekt, který jádro konzumuje přes API.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "JKva = jádro; prohlížeč jako samostatný projekt později",
+          "note": "Crates `jkva-*`, binárka `jkva`, repo `jkva`. Shell v tomto projektu je jen demo harness. Doporučeno.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Jiný název nebo jiné rozdělení",
+          "note": "Upřesni v poznámce – název ověřím na crates.io, GitHubu a doméně."
+        }
+      ],
+      "other": true
+    }
+  ]
+}

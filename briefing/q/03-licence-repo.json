@@ -1,0 +1,138 @@
+{
+  "section": "licence-repo",
+  "order": 3,
+  "title": "Licence, veřejnost a podoba repozitáře",
+  "intro": "Projekt má být od začátku veřejný, aktivní a použitelný jinými vývojáři. To není jen otázka marketingu – licence a podoba repozitáře ovlivňují, jaké knihovny smíme použít a jak snadno nám někdo přispěje.\n\nPozor na jednu věc: část klíčových knihoven z ekosystému Servo/Mozilla je **MPL-2.0** – konkrétně `cssparser`, `selectors`, `stylo*`, `webrender`, `mozjs` a `lightningcss`. Naopak `html5ever` je MIT/Apache-2.0. MPL je permisivní licence kompatibilní s MIT/Apache i s GPL, ale vyžaduje, aby upravené soubory zůstaly pod MPL a byly zveřejněné. Pokud je pouze používáme jako závislosti, náš kód pod MIT/Apache může zůstat uzavřenější – což je pro adopci výhodné. Pozor: **čistě permisivní CSS kaskáda v Rustu neexistuje**, takže volba licence je zároveň volbou závislostí.",
+  "questions": [
+    {
+      "id": "Q12",
+      "title": "Jakou licenci bude mít náš kód?",
+      "why": "Licence určuje, kdo nás smí použít – od studenta po firmu. Dual MIT/Apache-2.0 je standard Rust ekosystému a maximalizuje adopci i kompatibilitu s MPL závislostmi.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "MIT OR Apache-2.0 (dual)",
+          "note": "Standard Rustu. Firmy preferují Apache-2.0 (patentová doložka), jednotlivci MIT. Kompatibilní s MPL-2.0 závislostmi. Doporučeno.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "MPL-2.0",
+          "note": "Stejná licence jako Servo/Firefox. Copyleft na úrovni souborů: kdokoli, kdo upraví náš soubor, musí změnu zveřejnit. Chrání projekt před uzavřenými forky, ale odrazuje část firemních uživatelů."
+        },
+        {
+          "key": "C",
+          "label": "GPL-3.0",
+          "note": "Silný copyleft na celý binární celek. Znamená, že každý prohlížeč postavený na našem jádře musí být také GPL. Výrazně omezí adopci."
+        },
+        {
+          "key": "D",
+          "label": "AGPL-3.0",
+          "note": "Jako GPL i pro síťové použití. Pro jádro prohlížeče nepraktické a pro většinu firem nepoužitelné."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q13",
+      "title": "Kdy bude repozitář veřejný?",
+      "why": "Chceš, aby bylo vidět, že projekt žije. Veřejnost od začátku je nejlepší důkaz, ale znamená to disciplínu v commitech a dokumentaci od prvního dne – což je přesně to, co stejně chceme.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Veřejný od prvního commitu, s devlogem",
+          "note": "Každý týden krátký devlog (co, proč, co dál) + roadmapa. Nejsilnější signál „projekt žije\". Riziko: veřejnost vidí i experimenty a slepé uličky – řeší se to poctivým devlogem.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Veřejný od M1 (první vykreslená stránka)",
+          "note": "Nevystavujeme prázdný repozitář. O pár týdnů později, ale první dojem je silnější."
+        },
+        {
+          "key": "C",
+          "label": "Soukromý až do 0.1.0",
+          "note": "Nejmenší tlak, ale ztrácíme hlavní výhodu – viditelnou aktivitu a možnost získat přispěvatele brzy."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q14",
+      "title": "Jak bude vypadat „co se změnilo\" u každého commitu?",
+      "why": "Chceš, aby každý commit říkal, co se změnilo. Standardní cesta je Conventional Commits + generovaný CHANGELOG + PR šablona, která vynutí kontext. Ruční changelog u každého commitu je nerealistický a v praxi se přestane dodržovat.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Conventional Commits + auto CHANGELOG + PR šablona (Co/Proč/Dopad/Měření)",
+          "note": "Commit message nese typ a rozsah, CHANGELOG se generuje při release, PR šablona vynutí vysvětlení dopadu a naměřených čísel. Nejlepší poměr přínosu a úsilí.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Ruční detailní changelog u každého commitu",
+          "note": "Nejvíc informací, ale vysoká režie a rychle se přestane dodržovat. Vhodné jen pro velmi malý počet commitů."
+        },
+        {
+          "key": "C",
+          "label": "Squash merge s bohatým popisem PR",
+          "note": "Dobrá historie na úrovni PR, ale jednotlivé commity během práce jsou neinformativní."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q15",
+      "title": "Které „signály života\" a governance soubory chceme od začátku?",
+      "why": "Toto je to, co lidé u nového projektu kontrolují, než mu věnují čas. Většina je hotová za hodinu a vydrží roky.",
+      "type": "multi",
+      "options": [
+        {
+          "key": "A",
+          "label": "CONTRIBUTING.md + vývojářská příručka",
+          "note": "Jak postavit, jak testovat, jak poslat PR, jaké jsou konvence.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "CODE_OF_CONDUCT.md",
+          "note": "Standard (Contributor Covenant). Levné, očekávané.",
+          "rec": true
+        },
+        {
+          "key": "C",
+          "label": "SECURITY.md + způsob hlášení zranitelností",
+          "note": "Pro prohlížečové jádro nutnost – budeme zpracovávat nedůvěryhodný obsah.",
+          "rec": true
+        },
+        {
+          "key": "D",
+          "label": "Šablony issue a PR + návrh roadmapy (GitHub Projects)",
+          "note": "Veřejná roadmapa je nejsilnější signál, že projekt má směr.",
+          "rec": true
+        },
+        {
+          "key": "E",
+          "label": "GitHub Discussions",
+          "note": "Prostor pro otázky a návrhy; užitečné, ale chce moderaci."
+        },
+        {
+          "key": "F",
+          "label": "Týdenní devlog (blog/Discussions) a štítky stavu v README",
+          "note": "Ukazuje pokrok i tam, kde zrovna není vidět kód.",
+          "rec": true
+        },
+        {
+          "key": "G",
+          "label": "Automatické release notes a semver kontrola",
+          "note": "Release Please / release-plz. Dobré pro 0.x s rychlými iteracemi.",
+          "rec": true
+        }
+      ],
+      "other": true
+    }
+  ]
+}

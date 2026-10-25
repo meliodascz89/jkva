@@ -1,0 +1,193 @@
+{
+  "section": "paint",
+  "order": 11,
+  "title": "Vykreslování, kompozice a vizuální kvalita",
+  "intro": "Tady vzniká „fantastický\" dojem – nebo taky trhání, duchové při scrollu a rozbité barvy. Moderní vykreslování není „nakresli pixely\": je to strom vrstev, damage tracking, kompozice na GPU a správná práce s barvami.\n\nNa Apple Silicon máme výhodu: Metal, UMA a 120 Hz ProMotion. Abychom ji využili, musí být kompozice navržená od začátku – ne jako vrstva přilepená na konec.",
+  "questions": [
+    {
+      "id": "Q57",
+      "title": "Jaký model vykreslování?",
+      "why": "Okamžité překreslování celé stránky při každé změně je jednoduché, ale u velkých stránek a animací neúnosné. Retained vrstvy + display listy + damage umožňují překreslovat jen to, co se změnilo.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Retained strom vrstev + display listy + damage tracking",
+          "note": "Změna se zapíše do display listu, poškozená oblast se překreslí, zbytek se znovu zkomponuje. Základ pro plynulý scroll a animace.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Immediate mode: každý frame celá stránka",
+          "note": "Nejjednodušší a bezstavové, ale s velkými dokumenty pomalé a energeticky náročné."
+        },
+        {
+          "key": "C",
+          "label": "Hybrid: retained jen pro animované vrstvy, zbytek immediate",
+          "note": "Kompromis, ale pravidla „co je vrstva\" jsou pak nepredikovatelná a vznikají vizuální chyby."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q58",
+      "title": "Kdy vytvářet samostatné kompoziční vrstvy?",
+      "why": "Příliš mnoho vrstev žere paměť a GPU, příliš málo způsobuje trhání při scrollu a animacích. Heuristiky pro povýšení vrstvy jsou klíčové pro plynulost i spotřebu.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Automatické heuristiky: transform/opacity animace, fixed, video, canvas, scroll kontejnery, will-change",
+          "note": "Stejný přístup jako moderní prohlížeče. Vrstvy vznikají jen tam, kde to pomůže; počet je omezený rozpočtem.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Vrstvu jen na explicitní will-change",
+          "note": "Predikovatelné a úsporné, ale weby bez will-change budou trhat."
+        },
+        {
+          "key": "C",
+          "label": "Jedna vrstva pro celou stránku",
+          "note": "Nejjednodušší a nejúspornější, ale scroll velkých stránek bude pomalý."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q59",
+      "title": "Které kvalitativní vlastnosti jsou pro nás priorita?",
+      "why": "„Krásné vykreslování\" je potřeba rozložit na měřitelné vlastnosti, jinak se nedá řídit ani obhájit. Tato volba určí, co budeme měřit a optimalizovat.",
+      "type": "multi",
+      "options": [
+        {
+          "key": "A",
+          "label": "Kvalitní anti-aliasing hran a textu",
+          "note": "Nejvíc viditelný rozdíl proti „rychlému\" vykreslování.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Správná správa barev (sRGB + Display P3)",
+          "note": "Na Macu s P3 displejem je rozdíl vidět; konkurence to řeší nekonzistentně.",
+          "rec": true
+        },
+        {
+          "key": "C",
+          "label": "HDR obsah",
+          "note": "Efektní, ale v 0.1 nemáme video ani HDR obrázky – odložit."
+        },
+        {
+          "key": "D",
+          "label": "Ostrý text na Retina",
+          "note": "Základ čitelnosti; úzce souvisí s Q54.",
+          "rec": true
+        },
+        {
+          "key": "E",
+          "label": "Kvalitní stíny, blur a gradienty bez pruhů",
+          "note": "Nejvíc „prémiový\" pocit z UI; dithering gradientů je levný a hodně viditelný.",
+          "rec": true
+        },
+        {
+          "key": "F",
+          "label": "Plynulost 120 Hz a frame pacing",
+          "note": "ProMotion je hlavní výhoda Macu; bez správného pacing vypadá scroll hůř než 60 Hz.",
+          "rec": true
+        },
+        {
+          "key": "G",
+          "label": "backdrop-filter (sklo)",
+          "note": "Moderní efekt, ale drahý; v 0.1 volitelně."
+        },
+        {
+          "key": "H",
+          "label": "Věrnost vůči referenčnímu renderu (deltaE/SSIM)",
+          "note": "Objektivní měření kvality proti Safari/Chromu.",
+          "rec": true
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q60",
+      "title": "Které vizuální efekty musí 0.1 umět?",
+      "why": "Efekty jsou to, co dělá moderní UI moderním – ale každý je jinak drahý. Rozhodnutí určí, jak bude vypadat náš korpus a kolik času strávíme v shaderech.",
+      "type": "multi",
+      "options": [
+        {
+          "key": "A",
+          "label": "border-radius a box-shadow",
+          "note": "Naprostý základ moderního UI.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Gradienty (linear, radial, conic) s ditheringem",
+          "note": "Všude; bez ditheringu vznikají pruhy.",
+          "rec": true
+        },
+        {
+          "key": "C",
+          "label": "Filtry: blur, brightness, contrast, saturate",
+          "note": "Běžné v UI a obrázcích; blur je nejdražší.",
+          "rec": true
+        },
+        {
+          "key": "D",
+          "label": "clip-path a masky",
+          "note": "Čím dál běžnější (karty, ilustrace, přechody).",
+          "rec": true
+        },
+        {
+          "key": "E",
+          "label": "Mix-blend-mode",
+          "note": "Efektní, ale méně časté; lze odložit."
+        },
+        {
+          "key": "F",
+          "label": "backdrop-filter",
+          "note": "Glassmorphism; drahé, ale velmi viditelné. V 0.1 jako stretch.",
+          "rec": false
+        },
+        {
+          "key": "G",
+          "label": "CSS transitions a keyframe animace",
+          "note": "Nutné pro pocit živého UI.",
+          "rec": true
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q61",
+      "title": "Canvas, obrázky, SVG a video v 0.1?",
+      "why": "Canvas používá Speedometer (grafy) i mnoho webů. SVG je všude (ikony, ilustrace). Video je energeticky nejnáročnější scénář a zároveň nejlepší argument pro náš „energetický\" slib – ale vyžaduje AVFoundation/VideoToolbox.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Obrázky + SVG + Canvas 2D; video až v 0.2",
+          "note": "Pokryje grafiku a benchmarky. Video odložíme, ale navrhneme místo pro video vrstvu (kompozice, overlay controls).",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "A + WebGL/WebGPU",
+          "note": "Otevře 3D weby a hry, ale je to samostatný velký projekt (GLSL/WGSL kompatibilita, validace)."
+        },
+        {
+          "key": "C",
+          "label": "A + video přes AVFoundation",
+          "note": "Umožní měřit spotřebu energie při přehrávání – náš nejsilnější příběh. Ale +4–6 týdnů a další platformní vazba."
+        },
+        {
+          "key": "D",
+          "label": "Jen obrázky, bez canvasu a SVG",
+          "note": "Nejrychlejší, ale Speedometer neprojde a weby s ikonami budou rozbité."
+        }
+      ],
+      "other": true
+    }
+  ]
+}

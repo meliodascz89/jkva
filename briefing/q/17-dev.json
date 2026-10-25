@@ -1,0 +1,158 @@
+{
+  "section": "dev",
+  "order": 17,
+  "title": "Dokumentace, CI a release",
+  "intro": "Chceš, aby byl projekt použitelný jinými vývojáři a aby bylo vidět, že žije. To není o marketingu, ale o nudné disciplíně: každý veřejný symbol má dokumentaci, každý modul má popis a invarianty, každý commit má smysl, každý release má changelog a každé číslo má metodiku.\n\nDokumentace je zároveň nejlepší forma testu – pokud nedokážeme popsat, co modul dělá, pravděpodobně tomu nerozumíme.",
+  "questions": [
+    {
+      "id": "Q84",
+      "title": "Jaký rozsah češtiny v dokumentaci?",
+      "why": "Plná dvojjazyčná dokumentace včetně API referencí je překladatelský projekt sám o sobě a při každé změně kódu se rozjíždí. Zahraniční vývojáři potřebují angličtinu; ty potřebuješ češtinu. Rozsah musí být explicitní, jinak čeština tiše zastará.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "EN kanonická; CS plná pro README, průvodce, tutoriály, ADR a devlog; API reference jen EN",
+          "note": "Přepínač jazyka v README i na docs webu. API reference zůstává v rustdoc (EN), protože se generuje z kódu. CS průvodce se aktualizují při každém milníku. Doporučeno.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Plná parita EN + CS včetně API referencí",
+          "note": "Nejlepší pro české vývojáře, ale udržet při rychlém vývoji je nereálné bez placeného překladu; hrozí, že jedna verze zastará."
+        },
+        {
+          "key": "C",
+          "label": "Nejdřív jen EN, CS doplníme po 0.1",
+          "note": "Nejrychlejší, ale v rozporu s tvým požadavkem na dvojjazyčnost od začátku."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q85",
+      "title": "Jaký standard dokumentace v kódu?",
+      "why": "„Kvalitně okomentováno\" musí být vynutitelné, ne dobrovolné. Jinak se kvalita s přibývajícím kódem rozpadne – obzvlášť když hodně kódu píšou agenti.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "deny(missing_docs) + modulové docs s invarianty + SAFETY u každého unsafe + příklady u veřejného API",
+          "note": "Kompilátor vynutí dokumentaci veřejných věcí; clippy a rustdoc warnings jako chyby v CI. Každý modul má sekci „Invarianty\" a „Proč takto\". Doporučeno.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Povinné docs jen u veřejného API, interní kód volně",
+          "note": "Méně práce, ale interní moduly jsou přesně to, co bude chtít pochopit přispěvatel."
+        },
+        {
+          "key": "C",
+          "label": "Bez vynucení, jen doporučení",
+          "note": "V praxi to znamená, že dokumentace vznikne částečně a nesouvisle."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q86",
+      "title": "Kde běžet CI?",
+      "why": "macOS runnery u GitHubu jsou drahé a pomalé na start; Linux je levný. Máme ale vlastní M4 – můžeme ho použít jako self-hosted runner a ušetřit měsíčně nemalé peníze a mít realistické benchmarky.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Self-hosted M4 runner pro macOS + GitHub Linux pro rychlé testy",
+          "note": "Nejlepší poměr cena/výkon a realistické měření na cílovém hardware. Vyžaduje údržbu runneru a zabezpečení (public repo = riziko zneužití runneru).",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Jen GitHub-hosted macOS runnery",
+          "note": "Bez údržby, ale drahé (minuty se počítají) a pomalé; benchmarky budou zašuměné."
+        },
+        {
+          "key": "C",
+          "label": "Lokální CI (skripty) + příležitostné ruční běhy",
+          "note": "Nejlevnější, ale žádná viditelná aktivita a snadno se zapomene testovat."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q87",
+      "title": "Jak hlídat výkonnostní regrese?",
+      "why": "Bez bran se výkon zhoršuje po malých krocích a nikdo si toho nevšimne. Zároveň příliš přísné brány na PR zpomalují vývoj a vytvářejí falešné poplachy.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Criterion + vlastní harness: PR rychlé kontroly, nightly plná matice s publikovanou historií",
+          "note": "PR brzdí jen hrubé regrese (např. >5 %), jemné změny řeší nightly report. Historie je veřejná. Doporučeno.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Jen nightly, PR bez bran",
+          "note": "Rychlý vývoj, ale regrese se objeví pozdě a špatně se hledá viník."
+        },
+        {
+          "key": "C",
+          "label": "Ruční měření před release",
+          "note": "Nejjednodušší, ale v praxi se na něj zapomene."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q88",
+      "title": "Jaké release artefakty a signing?",
+      "why": "Nepodepsaná binárka na macOS znamená děsivé varování a nedůvěru. Pro veřejný projekt, který má vypadat profesionálně, je codesign + notarizace nutnost – a je to práce na hodiny, ne dny.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Podepsané a notarizované binárky, source tarball, crates.io, SBOM",
+          "note": "Profesionální dojem a méně problémů u uživatelů. Vyžaduje Apple Developer account (99 USD/rok) a GH Actions workflow.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Nepodepsané zipy + source",
+          "note": "Bez nákladů, ale každý uživatel musí obcházet Gatekeeper."
+        },
+        {
+          "key": "C",
+          "label": "Jen zdrojový kód, binárky ať si každý zkompiluje",
+          "note": "Nejjednodušší, ale výrazně snižuje počet lidí, kteří si projekt vyzkouší."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q89",
+      "title": "Jak postavit dokumentační web?",
+      "why": "Dokumentace musí být čitelná, prohledávatelná, verzovaná a dvojjazyčná. mdBook je standard Rust ekosystému, snadno se generuje v CI a dobře se v něm dělá přepínač jazyka.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "mdBook (EN + CS) na GitHub Pages, verzované podle releasů, s přepínačem jazyka",
+          "note": "Rychlé, standardní, snadno automatizovatelné; rustdoc pro API. Doporučeno.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Docusaurus / Next.js",
+          "note": "Hezčí a flexibilnější, ale je to frontendový projekt navíc a pomalejší build."
+        },
+        {
+          "key": "C",
+          "label": "Jen README + rustdoc",
+          "note": "Nejmenší práce, ale pro „podrobnou dokumentaci\" to nestačí."
+        }
+      ],
+      "other": true
+    }
+  ]
+}

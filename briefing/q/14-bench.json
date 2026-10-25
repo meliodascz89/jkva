@@ -1,0 +1,209 @@
+{
+  "section": "bench",
+  "order": 14,
+  "title": "Měření: jak prokážeme, že jsme dobří",
+  "intro": "Bez měření je „překonat nejlepší\" jen slogan. Zároveň platí zásadní věc z výzkumu: **Speedometer 3.1 a vykreslování top webů jsou dva různé cíle.** Speedometer neobsahuje tabulky, floaty, SVG styling, bidi, formuláře ani média – měří hlavně JS, DOM operace a event loop. Ladybirdův skok o 50 % na Speedometeru vznikl optimalizací timer clampingu a potlačením rAF v offscreen dokumentech, ne layoutem.\n\nDruhá tvrdá věc: **Speedometer vyžaduje skoro celý prohlížeč** – reálné okno ≥850×650, iframy, shadow DOM, contenteditable, canvas 2D a SVG. Rozhodnutí, zda ho chceme v 0.1, je tedy rozhodnutím o rozsahu, ne o benchmarku.\n\nA třetí: **JetStream 3.0** (vydaný 2026-03-31) je jediný velký benchmark, který běží v shellu bez DOM – ideální první automatizovaný signál. Čísla z JetStream 2 se s JetStream 3 nedají srovnávat.",
+  "questions": [
+    {
+      "id": "Q71",
+      "title": "Kdy se Speedometer stane součástí brány?",
+      "why": "Speedometer 3.1 není jen číslo – jeho harness vyžaduje reálné okno ≥850×650, iframy, shadow DOM, contenteditable, canvas 2D a SVG. To je skoro celý prohlížeč. Pokud ho chceme v 0.1 jako blokující bránu, musíme do 0.1 dostat shadow DOM i contenteditable, což je +3–4 měsíce práce. Ladybird měl po 7 letech a 1,19 mil. řádků ~5,9; Safari 26.2 na M2 dává 41,9.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Speedometer až od 0.2; v 0.1 měříme JetStream 3 (běží v shellu) + vlastní responsiveness harness na korpusu",
+          "note": "JetStream 3 je jediný velký benchmark, který běží bez DOM – ideální první automatizovaný signál. Vlastní harness na korpusu měří to, co skutečně umíme. Doporučeno.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Speedometer v 0.1, a tedy shadow DOM + contenteditable + iframe + canvas + SVG už v 0.1",
+          "note": "Nejlepší PR číslo, ale posouvá 0.1 o 3–4 měsíce a rozporuje řezy z Q42 a Q43. Cíl by byl ≥25 (≈60 % Safari)."
+        },
+        {
+          "key": "C",
+          "label": "Speedometer jen orientačně, nikdy jako blokující brána",
+          "note": "Měříme ho, ale neslibujeme číslo. Nejbezpečnější, ale méně motivující."
+        }
+      ],
+      "other": false
+    },
+    {
+      "id": "Q72",
+      "title": "Jaký konkrétní WPT cíl pro 0.1?",
+      "why": "WPT je jediné objektivní měřítko správnosti a dnes je to i regulatorní laťka: Apple v EU vyžaduje pro alternativní engine 90 % WPT a 80 % test262 (a to i s vypnutým JIT). Aktuální stabilní prohlížeče: Chrome 97,1 %, Firefox 95,6 %, Safari 94,2 %, Servo 90,4 % (aligned 88,3). Cíl musí být ambiciózní, ale ne nesplnitelný.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "55 % celkově, 80 % /dom/, 75 % /html/, 40 % /css/ (stretch dle matice)",
+          "note": "Nejambicióznější realistická varianta pro 12 měsíců; vyžaduje ale široké API pokrytí.",
+          "rec": false
+        },
+        {
+          "key": "B",
+          "label": "40 % celkově, 65 % /dom/, 60 % /html/, 30 % /css/ – veřejně publikované",
+          "note": "Dosažitelné s rozsahem z Q07 varianty B a zároveň číslo, které lze obhájit. Doporučeno.",
+          "rec": true
+        },
+        {
+          "key": "C",
+          "label": "Žádný absolutní cíl, jen meziroční růst",
+          "note": "Bezpečné, ale „projekt žije\" potřebuje konkrétní číslo, ne jen křivku."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q73",
+      "title": "Které benchmarky a metriky budou součástí bran (gates)?",
+      "why": "Každý benchmark v bráně znamená, že regrese blokuje merge. Příliš mnoho = pomalé CI a falešné poplachy; příliš málo = regrese se neodhalí. Toto je páteř našeho „měřitelného\" slibu.",
+      "type": "multi",
+      "options": [
+        {
+          "key": "A",
+          "label": "Speedometer 3.1 — tracking od 0.2 (v 0.1 jen orientačně)",
+          "note": "Vyžaduje shadow DOM, contenteditable, iframy, canvas a SVG. Do brány ho zařadíme, až bude celý stack hotový (viz Q71).",
+          "rec": false
+        },
+        {
+          "key": "B",
+          "label": "MotionMark",
+          "note": "Grafický výkon a plynulost animací – nejlépe zachycuje naši GPU výhodu.",
+          "rec": true
+        },
+        {
+          "key": "C",
+          "label": "Vlastní korpusová sada (screenshoty + vizuální diff)",
+          "note": "Nejdůležitější pro skutečnou kvalitu: top-100 a dokumentační weby proti referenčnímu renderu.",
+          "rec": true
+        },
+        {
+          "key": "D",
+          "label": "WPT subset (DOM, CSS, HTML, events)",
+          "note": "Objektivní míra správnosti specifikace; veřejné číslo, které jde sledovat v čase.",
+          "rec": true
+        },
+        {
+          "key": "E",
+          "label": "Paměť: footprint na kartu při N otevřených dokumentech",
+          "note": "Náš hlavní slib. Měříme stejný korpus jako konkurence, stejnou metodou.",
+          "rec": true
+        },
+        {
+          "key": "F",
+          "label": "Energie: powermetrics při scrollu a animaci",
+          "note": "Druhý hlavní slib; měření je náročné na stabilitu, ale stojí za to.",
+          "rec": true
+        },
+        {
+          "key": "G",
+          "label": "Studený start a first contentful paint",
+          "note": "Snadno měřitelné a uživatelsky důležité.",
+          "rec": true
+        },
+        {
+          "key": "H",
+          "label": "JetStream 3.0 (JS/Wasm, běží v shellu)",
+          "note": "Jediný velký benchmark, který nepotřebuje DOM – první automatizovaný signál a kontrola, že jsme JS engine nerozbili.",
+          "rec": true
+        },
+        {
+          "key": "I",
+          "label": "Velikost binárky a doba buildu",
+          "note": "Užitečné pro vývojářský zážitek, ne pro uživatele."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q74",
+      "title": "Proti čemu a jak budeme měřit?",
+      "why": "Srovnávat s čísly z internetu je nepoctivé – jiný hardware, jiná verze, jiná nastavení. Jediné obhajitelné srovnání je na stejném stroji, se stejnými weby a stejnou metodikou.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Stejný M4, stejný korpus, Safari + Chrome + my; mediány, warmup, zamčené verze, publikovaná metodika",
+          "note": "Jediné srovnání, které obstojí. Naměřená data a skripty zveřejníme, aby si to mohl zopakovat kdokoli.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Srovnání s publikovanými čísly výrobců",
+          "note": "Nejjednodušší, ale neobhajitelné – vždy se najde někdo, kdo zpochybní hardware i nastavení."
+        },
+        {
+          "key": "C",
+          "label": "Jen interní regresní trackování, bez veřejného srovnání",
+          "note": "Bezpečné, ale přicházíme o hlavní marketingový i motivační efekt."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q75",
+      "title": "Jak budeme publikovat výsledky?",
+      "why": "Veřejný dashboard je nejsilnější důkaz „projekt žije\" a zároveň nejlepší obrana proti nařčení z cherry-pickingu. Zároveň je to závazek, který bolí, když se něco zhorší.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Veřejný dashboard s historií, všechny běhy, včetně regresí",
+          "note": "Maximální důvěryhodnost a skvělý signál aktivity. Vyžaduje stabilní infrastrukturu a disciplínu.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Výsledky v devlogu při milnících",
+          "note": "Méně práce, stále užitečné, ale bez kontinuity a snadno se vynechá."
+        },
+        {
+          "key": "C",
+          "label": "Nepublikovat nic do 0.1",
+          "note": "Nejmenší tlak, ale ztrácíme příběh a možnost ukázat pokrok."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q76",
+      "title": "Kde budeme hledat výkonnostní výhru?",
+      "why": "Ne všechny optimalizace mají stejný efekt. Z výzkumu je jasné, že největší rozdíl dělá invalidace a hygiena event loopu, ne surový výpočet. Tato volba určí, kam půjde čas v M4.",
+      "type": "multi",
+      "options": [
+        {
+          "key": "A",
+          "label": "Inkrementální styl a layout (dirty roots, minimal invalidation)",
+          "note": "Největší páka na reálných webech i Speedometeru. Ladybird i Servo tady roky ladí okrajové případy.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Hygiena event loopu (timer clamping, skryté dokumenty, rAF)",
+          "note": "Překvapivě velký vliv na Speedometer; levné a měřitelné.",
+          "rec": true
+        },
+        {
+          "key": "C",
+          "label": "GPU kompozice a damage tracking",
+          "note": "Plynulost scrollu a animací, energetická výhoda.",
+          "rec": true
+        },
+        {
+          "key": "D",
+          "label": "Paměťová optimalizace a cache",
+          "note": "Náš hlavní slib; často jde o návrh datových struktur, ne o mikrooptimalizace.",
+          "rec": true
+        },
+        {
+          "key": "E",
+          "label": "JS/JIT optimalizace",
+          "note": "S V8 nemáme co zlepšovat – a to je dobře, protože benchmark pak měří naši práci."
+        }
+      ],
+      "other": true
+    }
+  ]
+}

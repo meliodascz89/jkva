@@ -1,0 +1,133 @@
+{
+  "section": "net",
+  "order": 7,
+  "title": "Síťová vrstva",
+  "intro": "Síť je první věc, kterou uživatel pocítí: čím dřív dorazí HTML a první kritické soubory, tím dřív je vidět stránka. Zároveň je to vrstva, kde se nejvíc projevuje integrace s platformou (proxy, trust store, HTTP/3) a kde se dají snadno udělat bezpečnostní chyby.\n\nV 0.1 nepotřebujeme vlastní TCP stack. Potřebujeme dobře zvolenou knihovnu, správnou cache a čisté rozhraní, které půjde později přesunout do samostatného procesu.",
+  "questions": [
+    {
+      "id": "Q31",
+      "title": "Na čem postavit HTTP?",
+      "why": "Volba určuje výkon, kontrolu nad cache a hlavně přenositelnost. NSURLSession je na Macu nejlépe integrovaná (proxy, HTTP/3, trust store, spořič energie), ale nedává nám přístup k detailům, které potřebujeme pro cache a měření.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "hyper + rustls + tokio",
+          "note": "Plná kontrola nad požadavky, hlavičkami a cache; přenositelné na Linux CI; čistě Rust. Musíme si sami dořešit proxy, trust store a HTTP/3.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "NSURLSession přes FFI",
+          "note": "Nejlepší integrace s macOS: systémová proxy, HTTP/3, trust store, energetická optimalizace. Ale omezená kontrola, horší testovatelnost a vazba na Apple platformy."
+        },
+        {
+          "key": "C",
+          "label": "libcurl",
+          "note": "Zralé a všestranné, ale C API, vlastní model vláken a horší integrace s async Rustem."
+        },
+        {
+          "key": "D",
+          "label": "hyper jako základ + volitelný „system transport\" pro macOS",
+          "note": "Abstrakce nad transportem: výchozí hyper, na macOS lze přepnout na NSURLSession pro systémy s proxy/MITM certifikáty. Víc práce, ale nejlepší z obou světů."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q32",
+      "title": "Odkud brát důvěryhodné certifikáty?",
+      "why": "Vlastní seznam kořenových certifikátů znamená, že weby za firemní proxy nebo s podnikovým MITM certifikátem neotevřeme. Uživatelé to vnímají jako „prohlížeč je rozbitý\".",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "rustls + rustls-platform-verifier (systémový trust store)",
+          "note": "Respektuje certifikáty nainstalované v macOS, funguje za firemní proxy. Bezpečné a očekávané chování.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Jen webpki-roots (zabudovaný seznam)",
+          "note": "Deterministické a jednoduché, ale rozbije firemní prostředí a vývojové proxy."
+        },
+        {
+          "key": "C",
+          "label": "Vlastní správa certifikátů s UI",
+          "note": "Maximální kontrola, ale musíme řešit expiraci, revokaci a uživatelské rozhraní – zbytečná práce."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q33",
+      "title": "HTTP/3 (QUIC) už v 0.1?",
+      "why": "HTTP/3 zlepšuje latenci na mobilních a ztrátových sítích, ale přidává další transport, ladění a testovací matici. Pro desktop na stabilní síti je přínos menší než pro mobil.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Ne v 0.1, ale architektura s ním počítá (alt-svc, výměna transportu)",
+          "note": "HTTP/1.1 + HTTP/2 pokryjí drtivou většinu webů. QUIC přidáme v 0.2 – buď `quinn` (nejlepší Rust QUIC), nebo `neqo` (co používá Firefox) – bez zásahu do zbytku.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Ano, quinn hned v 0.1",
+          "note": "Moderní a dobře vypadá v benchmarkách, ale +1–2 měsíce práce a riziko nestability."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q34",
+      "title": "Jak řešit HTTP cache?",
+      "why": "Cache je největší jednostranný zisk výkonu (a úspory paměti i sítě) a zároveň častý zdroj chyb (zastaralý obsah, špatné Vary, nekonzistence s cookies).",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "RFC 9111 přes http-cache-semantics + vlastní disk cache s limitem",
+          "note": "Ověřená logika čerstvosti a validace, vlastní úložiště s kompresí a LRU. Vhodné i pro offline režim.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Vlastní implementace cache od nuly",
+          "note": "Plná kontrola, ale RFC 9111 má mnoho okrajových případů; snadno vzniknou chyby, které se těžko hledají."
+        },
+        {
+          "key": "C",
+          "label": "Jen paměťová cache bez disku",
+          "note": "Jednoduché a bezpečné, ale ztrácíme výhodu mezi spuštěními a offline režim."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q35",
+      "title": "Cookies, proxy a DoH – v jakém rozsahu?",
+      "why": "Cookies jsou nutné pro přihlášení, ale zároveň největší stopovací kanál. Partitioning (CHIPS) a SameSite jsou dnes standard a ovlivňují, jak se weby chovají. Proxy je nutnost v korporátním prostředí.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "cookie_store jako základ + vlastní obal (SameSite, partitioning, CHIPS) + systémová proxy + DoH později",
+          "note": "Rozumný rozsah: správné chování cookies včetně moderních ochran, funkční proxy z macOS nastavení, DoH až s privacy vrstvou. Pozor: `cookie_store` nemá od února 2026 commity a neumí CHIPS – počítej s vlastním obalem nebo forkem.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Vlastní cookie jar od nuly včetně partitioningu",
+          "note": "Nejlepší kontrola a bezpečnost, ale je to víc práce, než se zdá (expirace, domény, path, Secure, HttpOnly, SameSite, CHIPS)."
+        },
+        {
+          "key": "C",
+          "label": "Minimalisticky: cookies bez partitioningu, proxy jen ručně",
+          "note": "Nejrychlejší, ale weby se budou chovat jinak než v Chrome/Safari a privacy příběh bude slabý."
+        }
+      ],
+      "other": true
+    }
+  ]
+}

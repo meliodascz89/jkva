@@ -1,0 +1,250 @@
+{
+  "section": "process",
+  "order": 18,
+  "title": "Proces: agenti, pluginy a definice hotového",
+  "intro": "Tohle je sekce, která rozhoduje, jestli projekt skutečně dojde do konce. Já budu fungovat jako Lead: držím architekturu, rozhodnutí, review a integraci. Subagenti v Agent Teamu dostanou přesně vymezené moduly a write scopes, aby si nešlapali po souborech.\n\nKlíčové pravidlo: **agent nikdy nedodá kód bez testů a bez dokumentace a nikdy nesloučí sám.** Lead reviewuje každý merge, spouští brány a hlídá, že rozhodnutí z briefingu se dodržují.",
+  "questions": [
+    {
+      "id": "Q90",
+      "title": "Jak má vypadat tým agentů?",
+      "why": "Příliš málo agentů = pomalý postup a dlouhé blokace. Příliš mnoho = konflikty, nekonzistence a reviews, která nestíhám. Role musí kopírovat hranice crates, ne libovolné rozdělení.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "4 stálí agenti: core/arch, layout+text, paint+GPU, JS bindingy+API",
+          "note": "Každý vlastní svůj crate a má vlastní testy. Lead dělá architekturu, review, integraci, dokumentaci a release. Doporučeno.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "2–3 agenti, více práce na každém",
+          "note": "Méně koordinace, ale menší paralelizace a pomalejší pokrok."
+        },
+        {
+          "key": "C",
+          "label": "6–8 agentů podle modulů",
+          "note": "Maximální paralelizace, ale velké riziko nekonzistence a přetíženého review; vhodné až po 0.1."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q91",
+      "title": "Jak přísné mají být merge gates?",
+      "why": "V agentním vývoji je snadné vygenerovat velké množství kódu, které „funguje\" na jeden případ. Brány jsou jediná obrana proti tomu, aby se do mainu dostal neotestovaný chaos.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Každý PR: CI zelené, testy, clippy -D warnings, docs, review Leadem, žádný direct push do main",
+          "note": "Pomalé, ale jediné bezpečné. Zahrnuje povinný popis „Co/Proč/Dopad/Měření\". Doporučeno.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Agenti mohou mergovat sami po zeleném CI",
+          "note": "Rychlejší, ale bez review se budou opakovat stejné chyby a architektura se rozejde."
+        },
+        {
+          "key": "C",
+          "label": "Lidský review u každého PR",
+          "note": "Nejvyšší kvalita, ale při tomto tempu nereálné."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q92",
+      "title": "Které interní pluginy do harnessu máme postavit?",
+      "why": "Nástroje rozhodují o rychlosti celého projektu. Několik dobrých pluginů ušetří víc času než další funkce v jádře – a zároveň ukážou, že umíme vyvíjet i nástroje.",
+      "type": "multi",
+      "options": [
+        {
+          "key": "A",
+          "label": "WPT runner (spuštění subsetu, přehled pass rate, diff proti předchozímu běhu)",
+          "note": "Bez toho nebudeme vědět, jak jsme na tom se specifikací. Nejvyšší priorita.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Reftest / screenshot diff (generování, porovnání, vizuální náhled)",
+          "note": "Páteř vizuální kvality; okamžitě ukáže regrese v renderu.",
+          "rec": true
+        },
+        {
+          "key": "C",
+          "label": "Bench tracker (historie criterions, Speedometer, paměť, energie + graf)",
+          "note": "Veřejný dashboard a obrana proti regresím.",
+          "rec": true
+        },
+        {
+          "key": "D",
+          "label": "Offline spec index (WHATWG/MDN/WPT + rustdoc, fulltextové hledání)",
+          "note": "Zrychlí práci agentů i moji; snižuje halucinace o specifikaci."
+        },
+        {
+          "key": "E",
+          "label": "ADR / decision log generátor (z briefingu do DECISIONS.md)",
+          "note": "Udrží rozhodnutí dohledatelná a konzistentní."
+        },
+        {
+          "key": "F",
+          "label": "Crate audit dashboard (verze, licence, poslední release, CVEs)",
+          "note": "Užitečné pro supply chain; lze nahradit cargo-deny + Dependabotem."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q93",
+      "title": "Jak využívat memory a graphify?",
+      "why": "Kontext se ztrácí mezi sessions a mezi agenty. Memory drží rozhodnutí a konvence; graphify drží architekturu a odhalí, když se kód rozejde s návrhem.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Memory pro rozhodnutí, konvence a benchmarky; graphify na začátku každého milníku pro kontrolu architektonického driftu",
+          "note": "Levé a dlouhodobě udržitelné. Každé rozhodnutí z briefingu se uloží jako memory a ADR. Doporučeno.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Jen memory",
+          "note": "Stačí na kontext, ale neodhalí strukturální dluh."
+        },
+        {
+          "key": "C",
+          "label": "Jen graphify",
+          "note": "Dobré pro strukturu, ale ztrácíme rozhodnutí a jejich důvody."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q94",
+      "title": "Co musí splnit 0.1.0, aby se vydala?",
+      "why": "Definice hotového musí být binární a veřejná. Jinak se release posouvá donekonečna nebo se vydá něco, co neumí to, co jsme slíbili.",
+      "type": "multi",
+      "options": [
+        {
+          "key": "A",
+          "label": "Korpus: definovaný seznam webů projde vizuálním testem s dokumentovanými výjimkami",
+          "note": "Hlavní důkaz použitelnosti.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Benchmarky: změřená a publikovaná matice (Speedometer, MotionMark, paměť, energie, start)",
+          "note": "Hlavní důkaz výkonu.",
+          "rec": true
+        },
+        {
+          "key": "C",
+          "label": "WPT: dosažený a publikovaný pass rate pro definovaný subset",
+          "note": "Hlavní důkaz správnosti.",
+          "rec": true
+        },
+        {
+          "key": "D",
+          "label": "Dokumentace EN+CS dle Q84 a Q85, včetně architektury a průvodce přispíváním",
+          "note": "Hlavní důkaz, že projekt může použít někdo jiný.",
+          "rec": true
+        },
+        {
+          "key": "E",
+          "label": "Stabilita: 24 h fuzz bez nálezu, žádná známá soundness chyba, memory testy bez úniků",
+          "note": "Hlavní důkaz robustness.",
+          "rec": true
+        },
+        {
+          "key": "F",
+          "label": "Release: podepsané binárky, changelog, demo video, blog post",
+          "note": "Hlavní důkaz, že projekt žije.",
+          "rec": true
+        },
+        {
+          "key": "G",
+          "label": "Žádná otevřená P0/P1 chyba a všechna ADR schválená",
+          "note": "Procesní hygiena."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q95",
+      "title": "Co se má stát hned po tvém vyplnění briefingu?",
+      "why": "Briefing bez následné akce je jen dokument. Tato otázka potvrzuje, že rozumím zadání: nejdřív rozhodnutí, pak bootstrap, pak agenti.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "DECISIONS.md + bootstrap repozitáře + M0 + spawn agentů",
+          "note": "Z odpovědí vygeneruji ADR, založím repo se strukturou, CI a dokumentací, postavím walking skeleton a rozdělím práci agentům. Doporučeno.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Nejdřív mi pošli revidovaný plán ke schválení",
+          "note": "Jeden mezikrok navíc; vhodné, pokud chceš mít nad bootstrapem větší kontrolu."
+        },
+        {
+          "key": "C",
+          "label": "Ještě předtím hlubší technický design (detailní spec modulů)",
+          "note": "Delší příprava a méně rizika, ale odsouvá první viditelný výsledek."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q96",
+      "title": "Co má být hotové za prvních 14 dní (M0)?",
+      "why": "První dva týdny určují tempo a důvěryhodnost. Walking skeleton – něco, co jde spustit a vidět – je lepší než dokonalý design dokument.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Walking skeleton: repo, CI, workspace, docs web, ADR, wgpu/vello trojúhelník, screenshot harness, WPT runner",
+          "note": "Vše propojené a spustitelné, i když prázdné. Doporučeno.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Detailní architektonický dokument (100+ stran) před kódem",
+          "note": "Méně rizika pozdějších změn, ale dva týdny bez výsledku a riziko „analýza paralýzou\"."
+        },
+        {
+          "key": "C",
+          "label": "Rovnou HTML parser a DOM",
+          "note": "Nejrychleji k nějakému kódu, ale bez CI a harnessu se kvalita neudrží."
+        }
+      ],
+      "other": true
+    },
+    {
+      "id": "Q97",
+      "title": "Jak často komunikovat pokrok?",
+      "why": "Chceš vidět, že projekt žije. Pravidelný rytmus je nejlepší lék proti „tichému\" projektu, který se měsíce neozve.",
+      "type": "single",
+      "options": [
+        {
+          "key": "A",
+          "label": "Týdenní devlog + měsíční benchmark report + release notes u každé verze",
+          "note": "Udržitelné a čitelné. Doporučeno.",
+          "rec": true
+        },
+        {
+          "key": "B",
+          "label": "Denní krátké statusy",
+          "note": "Maximální přehled, ale vysoká režie a brzy se z toho stane šum."
+        },
+        {
+          "key": "C",
+          "label": "Jen při milnících",
+          "note": "Nejmenší režie, ale mezi milníky projekt působí mrtvě."
+        }
+      ],
+      "other": true
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+[package]
+name = "jkva-platform"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+objc2.workspace = true
+objc2-foundation.workspace = true
+objc2-metal.workspace = true
+
+[[bin]]
+name = "metal-probe"
+path = "src/bin/metal-probe.rs"

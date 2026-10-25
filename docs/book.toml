@@ -1,0 +1,12 @@
+[book]
+title = "JKva"
+authors = ["JKva contributors"]
+language = "en"
+src = "src"
+multilingual = false
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/jkva/jkva"
+edit-url-template = "https://github.com/jkva/jkva/edit/main/docs/src/{path}"
