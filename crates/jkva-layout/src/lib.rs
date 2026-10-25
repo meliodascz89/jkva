@@ -3,8 +3,9 @@
 //! This crate owns the step between the DOM and painting: it turns a
 //! [`jkva_dom::Document`] plus resolved styles into a flat tree of positioned boxes.
 //! Per ADR-016 the long-term plan is a hybrid (own block/inline/float/table, `taffy`
-//! for flex and grid); the flex, grid and table halves do not exist yet, and neither
-//! do floats, positioning or fragmentation.
+//! for flex and grid). Today the crate has its own block, inline and single-line flex
+//! formatting contexts; floats, grid, tables, positioning and fragmentation do not
+//! exist yet.
 //!
 //! # Pipeline
 //!
@@ -67,7 +68,7 @@
 //! assert_eq!(tree.boxes[1].rect, tree.boxes[1].content);
 //! ```
 //!
-//! # What M1 lays out
+//! # What layout does
 //!
 //! * **Block flow.** Elements with `display: block` stack vertically in source order.
 //!   `width: auto` fills the containing block minus the horizontal margins; an explicit
@@ -78,48 +79,75 @@
 //!   in the nearest block. Consecutive collapsible whitespace becomes one space, edges
 //!   of a line are trimmed, and lines break greedily at spaces when the next word would
 //!   exceed the available width. Line height is `LINE_HEIGHT_FACTOR * font_size`
-//!   (`1.2em`), and lines stack.
+//!   (`1.2em`), and lines stack. An inline element gets one box per line covering its
+//!   text on that line.
+//! * **Flex flow.** An element with `display: flex` is a block-level, single-line flex
+//!   container: `flex-direction: row | column`, `justify-content`
+//!   (`flex-start`, `flex-end`, `center`, `space-between`, `space-around`),
+//!   `align-items` (`stretch`, `flex-start`, `center`, `flex-end`) and one `gap` for
+//!   both axes. Its children are flex items; an inline child is blockified and each
+//!   bare text node child becomes its own anonymous item. Items without a declared
+//!   width are sized by the maximum width of their own inline content (a documented
+//!   approximation, see below), and `stretch` fills the line's cross size unless the
+//!   item declares a height.
 //! * **`display: none`.** The element and its whole subtree produce no boxes.
 //!
 //! # Simplifications (deliberate, documented)
 //!
-//! These are the known gaps of the M1 model. They are listed here so that a reader can
-//! tell an unfinished feature from a bug.
+//! These are the known gaps of the current model. They are listed here so that a reader
+//! can tell an unfinished feature from a bug.
 //!
-//! 1. **No float, no flex, no grid, no table, no `position`.** Every box is in normal
-//!    flow. `inline-block`, `flex`, `grid`, `table-*` and `list-item` must be mapped to
-//!    [`Display`] by the engine until M2.
-//! 2. **Margin collapsing is minimal.** Only adjacent block siblings collapse, as
+//! 1. **Flex is single-line and partial.** There is no wrapping, no `flex-grow`,
+//!    `flex-shrink` or `flex-basis`, no `order`, no `align-self`, no `align-content`,
+//!    no nested percentage basis and no automatic minimum size. `auto` margins on an
+//!    item resolve to `0.0` instead of absorbing free space. Items keep their source
+//!    order and never shrink, so an overflowing line simply overflows.
+//! 2. **Flex intrinsic sizing is a documented approximation.** An item without a
+//!    declared width is as wide as the longest line of its *own inline content*; block
+//!    descendants do not contribute, so an item whose content is only blocks collapses
+//!    to its padding and border. There is no `min-content`/`max-content` keyword, no
+//!    percentage measurement of the free space and no text-based minimum width.
+//! 3. **`inline-flex` is not a flex container.** [`Display`] has no inline-level flex
+//!    variant; the engine maps `inline-flex` to [`Display::Inline`] today, so it is
+//!    flattened into the surrounding inline flow. Mapping it to [`Display::Flex`] would
+//!    make it behave as a block-level flex container, which is the intended fallback.
+//! 4. **No float, no grid, no table, no `position`.** Those boxes are in normal flow.
+//!    `inline-block`, `grid`, `table-*` and `list-item` must be mapped to [`Display`] by
+//!    the engine for now.
+//! 5. **Margin collapsing is minimal.** Only adjacent block siblings collapse, as
 //!    `max(bottom, top)`. Negative margins are clamped to zero instead of participating
 //!    in the CSS rule that adds the most negative margin. Parent/child collapsing
 //!    (the parent's top margin with the first child's, and the bottom margin with the
 //!    last child's) is not modelled, so a child's vertical margins always stay inside
 //!    the parent's content box. Self-collapsing empty blocks, clearance and tables of
-//!    margins are absent.
-//! 3. **Inline elements are flattened.** An element with `display: inline` produces no
-//!    box of its own: its text joins the parent block's inline flow, and its margin,
-//!    padding, border, background, width and height are ignored. A block-level
-//!    descendant of an inline element is hoisted into the nearest block flow, in source
-//!    order. Splitting an inline box across lines (and thus inline backgrounds) is M2.
-//! 4. **Text is not shaped here.** Layout measures through [`TextMeasure`], treats
+//!    margins are absent. Margins inside a flex container never collapse.
+//! 6. **Inline boxes are minimal.** An inline element's box covers its text per line and
+//!    only the text style is applied: its margin, padding, border and background are not
+//!    laid out yet, and a box wrapping across lines is one box per line with no
+//!    continuity. A block-level descendant of an inline element is hoisted into the
+//!    nearest block flow, in source order.
+//! 7. **Text is not shaped here.** Layout measures through [`TextMeasure`], treats
 //!    advances as additive, has no kerning across fragments, no hyphenation, no
 //!    `word-break`/`overflow-wrap` (a word wider than a line overflows it), no
 //!    `text-align`/`text-indent`/`letter-spacing`/`word-spacing`, and no bidirectional
 //!    reordering. Unicode spaces other than the ASCII collapsible ones are kept inside
 //!    words, so there is no break opportunity at a NO-BREAK SPACE.
-//! 5. **Only physical, absolute lengths.** No `%`, `em`, `rem`, `vw`/`vh`, no
-//!    `min-*`/`max-*`, no `box-sizing: border-box`, no vertical writing modes and no
-//!    RTL page layout (ADR-016 documents RTL text without RTL layout as a visible gap).
-//! 6. **No overflow handling, no scrollbars, no scrolling.** An explicitly small box
+//! 8. **Physical lengths only.** Absolute lengths and percentages of the containing
+//!    block's width are supported for width, margin and padding; percentage heights
+//!    behave like `auto`, because no containing block height is definite. `em`/`rem`,
+//!    `vw`/`vh`, `min-*`/`max-*`, `box-sizing: border-box`, vertical writing modes and
+//!    RTL page layout are absent (ADR-016 documents RTL text without RTL layout as a
+//!    visible gap).
+//! 9. **No overflow handling, no scrollbars, no scrolling.** An explicitly small box
 //!    does not clip; a viewport smaller than the content does not shrink the content.
-//! 7. **No fragmentation, no pagination, no `::first-line`.** Layout is one pass over
-//!    one document; there is no incremental seam yet (ADR-016 wants one from M1, this
-//!    pass is the whole-document baseline it will build on).
-//! 8. **Recursive, not iterative.** Deep documents recurse; making the traversal
-//!    iterative is required before layout can be fed hostile trees.
-//! 9. **The root box is the page canvas.** It covers at least the viewport; its content
-//!    box height is the used height of its children, so a consumer can tell the
-//!    document height from it.
+//! 10. **No fragmentation, no pagination, no `::first-line`.** Layout is one pass over
+//!     one document; there is no incremental seam yet (ADR-016 wants one from M1, this
+//!     pass is the whole-document baseline it will build on).
+//! 11. **Recursive, not iterative.** Deep documents recurse; making the traversal
+//!     iterative is required before layout can be fed hostile trees.
+//! 12. **The root box is the page canvas.** It covers at least the viewport; its content
+//!     box height is the used height of its children, so a consumer can tell the
+//!     document height from it.
 //!
 //! # Memory
 //!

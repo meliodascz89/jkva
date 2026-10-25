@@ -1,4 +1,4 @@
-//! The layout algorithm: block flow, inline flow and greedy line breaking.
+//! The layout algorithm: block flow, inline flow, flex flow and greedy line breaking.
 //!
 //! # Algorithm
 //!
@@ -10,9 +10,11 @@
 //! inline-level and block-level items (the internal `Flow` enum):
 //!
 //! * a text node becomes an inline item;
-//! * an element with `display: inline` contributes no box and its children are
-//!   walked in its place, so the text participates in the surrounding inline flow;
+//! * an element with `display: inline` contributes its text to the inline flow and an
+//!   inline box per line on top of it;
 //! * an element with `display: block` becomes a block-level item;
+//! * an element with `display: flex` becomes a block-level item that lays its children
+//!   out with the flex algorithm;
 //! * `display: none` removes the subtree.
 //!
 //! The flow cursor moves down the block's content box. Inline items accumulate tokens;
@@ -21,14 +23,33 @@
 //! content. Then the block child is placed at the cursor, its collapsed top margin
 //! having been applied first.
 //!
+//! # Flex
+//!
+//! A flex container ([`Display::Flex`], a block-level box) lays its children out as a
+//! single line of items. The modelled subset is `flex-direction: row | column`,
+//! `justify-content` (five values), `align-items` (four values) and one `gap` for both
+//! axes. Items are laid out in two steps: a *measurement pass* places every item at the
+//! container's content origin with the width the algorithm gives it, then positions are
+//! computed from the item sizes and each item's subtree is translated into place. There
+//! is no second layout pass, because block content in this milestone does not depend on
+//! its box height: `align-items: stretch` can therefore patch the used height of a row
+//! item after its content has been laid out.
+//!
+//! Items are block-level children; an inline child is **blockified** (laid out as a
+//! block item, which is what CSS does for flex items), and each bare text node child
+//! becomes its own anonymous item. An item without a declared width is sized by a
+//! documented max-content approximation: the widest line of its own inline content,
+//! measured with [`TextMeasure`]; block-level descendants do not contribute to it.
+//!
 //! # Vertical margins
 //!
-//! Only adjacent siblings collapse, and only as `max(margin_bottom, margin_top)`. A
-//! whitespace-only text node between two blocks does not break the collapsing, because
+//! Only adjacent block siblings collapse, and only as `max(margin_bottom, margin_top)`.
+//! A whitespace-only text node between two blocks does not break the collapsing, because
 //! it produces no line box; a line of text does. Negative margins are clamped to zero
 //! before collapsing, so this implementation never needs the CSS rule that adds the
 //! most negative margin. Parent/child collapsing, self-collapsing empty blocks and
-//! clearance are not modelled — see the crate-level simplification list.
+//! clearance are not modelled — see the crate-level simplification list. Margins inside
+//! a flex container never collapse.
 //!
 //! # Horizontal margins
 //!
@@ -39,7 +60,9 @@
 use jkva_dom::{Document, NodeId, NodeKind};
 
 use crate::geometry::{Point, Rect};
-use crate::style::{Display, Edges, Length, StyleSource};
+use crate::style::{
+    AlignItems, Display, Edges, FlexDirection, JustifyContent, Length, StyleSource,
+};
 use crate::text::{LINE_HEIGHT_FACTOR, TextMeasure, TextRun};
 use crate::tree::{LayoutBox, LayoutTree, Viewport};
 
@@ -133,6 +156,29 @@ struct BlockMetrics {
     index: usize,
     /// Border-box height, i.e. the distance the parent's cursor advances.
     border_height: f32,
+}
+
+/// A block box whose geometry the caller has already decided.
+///
+/// Block flow derives the geometry from the margins and the containing block, whereas
+/// the flex algorithm decides the main and cross positions itself. Both end in
+/// [`Layouter::layout_block_box`] through this struct, so a box is built exactly one
+/// way.
+struct BlockBox {
+    /// Left edge of the border box.
+    border_x: f32,
+    /// Top edge of the border box.
+    y: f32,
+    /// Border-box width, i.e. content width plus padding and border.
+    border_box_width: f32,
+    /// Resolved padding.
+    padding: Edges,
+    /// Resolved border widths.
+    border: Edges,
+    /// Content height forced by the caller (`align-items: stretch`), if any.
+    ///
+    /// It wins over a declared height, and the item's content is allowed to overflow.
+    forced_content_height: Option<f32>,
 }
 
 /// An item in the flow of one block, after inline boxes have been flattened.
@@ -274,6 +320,75 @@ struct FlowState {
     pending_margin: Option<f32>,
 }
 
+/// A child of a flex container, before it has been measured.
+#[derive(Clone, Copy, Debug)]
+struct FlexNode {
+    /// The node the item's box comes from: an element, or a text node for an
+    /// anonymous item.
+    node: NodeId,
+    /// `true` when the item is the anonymous box wrapped around a bare text node.
+    anonymous_text: bool,
+}
+
+/// One flex item after the measurement pass.
+struct FlexItem {
+    /// Used margins, resolved against the container's content width.
+    margin: Edges,
+    /// Resolved padding.
+    padding: Edges,
+    /// Resolved border widths.
+    border: Edges,
+    /// Content width the flex algorithm decided for the item.
+    content_width: f32,
+    /// Border-box height produced by the measurement layout (or by `stretch`).
+    border_height: f32,
+    /// Index of the item's own box, and so the first box of its subtree.
+    start: usize,
+    /// One past the last box of the item's subtree.
+    end: usize,
+    /// Whether the item declared a height; `align-items: stretch` must not override it.
+    height_declared: bool,
+    /// Content height forced by `stretch` once the line cross size is known.
+    forced_height: Option<f32>,
+}
+
+impl FlexItem {
+    /// Outer (margin-box) width of the item.
+    fn outer_width(&self) -> f32 {
+        self.margin.horizontal()
+            + self.padding.horizontal()
+            + self.border.horizontal()
+            + self.content_width
+    }
+
+    /// Outer (margin-box) height of the item.
+    fn outer_height(&self) -> f32 {
+        self.margin.vertical() + self.border_height
+    }
+}
+
+/// Returns `(leading, between)` for distributing `free` space along the main axis.
+///
+/// `SpaceBetween` with a single item packs it at the start and `SpaceAround` centres it,
+/// as CSS requires. The callers only pass non-negative free space, so an overflowing
+/// line packs at the start for every variant (documented simplification).
+fn justify_offsets(justify: JustifyContent, free: f32, count: usize) -> (f32, f32) {
+    let count = count.max(1) as f32;
+    match justify {
+        JustifyContent::FlexStart => (0.0, 0.0),
+        JustifyContent::FlexEnd => (free, 0.0),
+        JustifyContent::Center => (free / 2.0, 0.0),
+        JustifyContent::SpaceBetween => {
+            if count > 1.0 {
+                (0.0, free / (count - 1.0))
+            } else {
+                (0.0, 0.0)
+            }
+        }
+        JustifyContent::SpaceAround => (free / (count * 2.0), free / count),
+    }
+}
+
 /// Collapses two adjacent vertical margins.
 ///
 /// The M1 model is "the larger of the two": negative margins are clamped to zero by
@@ -282,6 +397,17 @@ struct FlowState {
 /// parent's margins with its first and last child; neither is modelled yet.
 fn collapse_margins(first: f32, second: f32) -> f32 {
     first.max(second)
+}
+
+/// Returns `rect` moved by `(dx, dy)`, keeping its extents exact.
+///
+/// The size is copied rather than recomputed through [`Rect::new`], so a sub-pixel
+/// extent cannot drift when a flex item is translated.
+fn translate_rect(rect: Rect, dx: f32, dy: f32) -> Rect {
+    Rect {
+        origin: Point::new(rect.origin.x + dx, rect.origin.y + dy),
+        size: rect.size,
+    }
 }
 
 /// Replaces negative and non-finite values with `0.0`.
@@ -451,7 +577,7 @@ impl Layouter<'_> {
         margin
     }
 
-    /// Lays out one block-level element.
+    /// Lays out one block-level element in block flow.
     ///
     /// `y` is the top of the element's border box and `margin` its used margins; the
     /// caller has already applied the collapsed top margin to the flow cursor.
@@ -475,10 +601,32 @@ impl Layouter<'_> {
             Some(width) => width + padding.horizontal() + border.horizontal(),
             None => finite_non_negative(containing.width - margin.horizontal()),
         };
-        let inner_width =
-            finite_non_negative(border_box_width - padding.horizontal() - border.horizontal());
-        let content_x = border_x + border.left + padding.left;
-        let content_top = y + border.top + padding.top;
+        self.layout_block_box(
+            node,
+            BlockBox {
+                border_x,
+                y,
+                border_box_width,
+                padding,
+                border,
+                forced_content_height: None,
+            },
+        )
+    }
+
+    /// Lays out one block box with caller-decided geometry.
+    ///
+    /// This is the single place that turns a [`BlockBox`] into a [`LayoutBox`]: it
+    /// resolves the content box, runs the right formatting context for the children
+    /// (block flow or flex), and resolves the used height. Block flow and the flex
+    /// algorithm both call it, so an item and an in-flow block cannot disagree about
+    /// padding, border or height resolution.
+    fn layout_block_box(&mut self, node: NodeId, layout: BlockBox) -> BlockMetrics {
+        let inner_width = finite_non_negative(
+            layout.border_box_width - layout.padding.horizontal() - layout.border.horizontal(),
+        );
+        let content_x = layout.border_x + layout.border.left + layout.padding.left;
+        let content_top = layout.y + layout.border.top + layout.padding.top;
         let index = self.boxes.len();
         self.boxes.push(LayoutBox {
             node,
@@ -491,13 +639,23 @@ impl Layouter<'_> {
             x: content_x,
             width: inner_width,
         };
-        let (children, children_height) = self.layout_content(node, inner, content_top);
-        let content_height = match self.styles.height(node).resolve(None) {
-            Some(height) if height.is_finite() && height >= 0.0 => height,
-            _ => children_height,
+        let definite_height = self.styles.height(node).resolve(None);
+        let (children, children_height) = if self.styles.display(node) == Display::Flex {
+            self.layout_flex_content(node, inner, content_top, definite_height)
+        } else {
+            self.layout_content(node, inner, content_top)
         };
-        let border_height = content_height + padding.vertical() + border.vertical();
-        let rect = Rect::new(border_x, y, border_box_width, border_height);
+        let content_height = layout
+            .forced_content_height
+            .or(definite_height)
+            .unwrap_or(children_height);
+        let border_height = content_height + layout.padding.vertical() + layout.border.vertical();
+        let rect = Rect::new(
+            layout.border_x,
+            layout.y,
+            layout.border_box_width,
+            border_height,
+        );
         let content = Rect::new(content_x, content_top, inner_width, content_height);
         self.boxes[index] = LayoutBox {
             node,
@@ -512,11 +670,396 @@ impl Layouter<'_> {
         }
     }
 
+    /// Lays out the children of a flex container and returns `(children, used height)`.
+    ///
+    /// One line, no wrapping: the main axis is horizontal for
+    /// [`FlexDirection::Row`] and vertical for [`FlexDirection::Column`]. `definite_height`
+    /// is the container's declared content height, which makes the cross size of a row
+    /// container (and the main size of a column container) definite.
+    ///
+    /// Items are laid out once, at the container's content origin, and then translated
+    /// into place. That is sound because block content in this milestone does not depend
+    /// on its box height, so the measurement layout produces the same children wherever
+    /// the item ends up.
+    fn layout_flex_content(
+        &mut self,
+        node: NodeId,
+        containing: ContainingBlock,
+        top: f32,
+        definite_height: Option<f32>,
+    ) -> (Vec<usize>, f32) {
+        let direction = self.styles.flex_direction(node);
+        let justify = self.styles.justify_content(node);
+        let align = self.styles.align_items(node);
+        let gap = finite_non_negative(self.styles.gap(node));
+
+        let mut nodes = Vec::new();
+        self.collect_flex_items(node, &mut nodes);
+        if nodes.is_empty() {
+            return (Vec::new(), 0.0);
+        }
+
+        let mut items: Vec<FlexItem> = Vec::with_capacity(nodes.len());
+        for flex_node in &nodes {
+            let (margin, padding, border) = if flex_node.anonymous_text {
+                // An anonymous item is a bare text run: it has no box decorations.
+                (Edges::ZERO, Edges::ZERO, Edges::ZERO)
+            } else {
+                (
+                    self.styles
+                        .margin(flex_node.node)
+                        .resolve(Some(containing.width))
+                        .clamped(),
+                    self.styles
+                        .padding(flex_node.node)
+                        .resolve(Some(containing.width))
+                        .clamped(),
+                    self.styles.border(flex_node.node).clamped(),
+                )
+            };
+            let declared_width = if flex_node.anonymous_text {
+                None
+            } else {
+                self.styles
+                    .width(flex_node.node)
+                    .resolve(Some(containing.width))
+            };
+            let declared_height = if flex_node.anonymous_text {
+                None
+            } else {
+                self.styles.height(flex_node.node).resolve(None)
+            };
+            // A declared width wins. Otherwise a row item is sized to its max-content
+            // approximation, and a column item stretches to the line unless the cross
+            // axis is aligned instead of stretched.
+            let content_width = match (direction, declared_width, align) {
+                (_, Some(width), _) => width,
+                (FlexDirection::Row, None, _) => {
+                    self.max_content_width(flex_node.node, flex_node.anonymous_text)
+                }
+                (FlexDirection::Column, None, AlignItems::Stretch) => finite_non_negative(
+                    containing.width
+                        - margin.horizontal()
+                        - padding.horizontal()
+                        - border.horizontal(),
+                ),
+                (FlexDirection::Column, None, _) => {
+                    self.max_content_width(flex_node.node, flex_node.anonymous_text)
+                }
+            };
+            let start = self.boxes.len();
+            let metrics = if flex_node.anonymous_text {
+                self.layout_text_item(
+                    flex_node.node,
+                    ContainingBlock {
+                        x: containing.x,
+                        width: content_width,
+                    },
+                    top,
+                )
+            } else {
+                self.layout_block_box(
+                    flex_node.node,
+                    BlockBox {
+                        border_x: containing.x + margin.left,
+                        y: top,
+                        border_box_width: content_width
+                            + padding.horizontal()
+                            + border.horizontal(),
+                        padding,
+                        border,
+                        forced_content_height: None,
+                    },
+                )
+            };
+            items.push(FlexItem {
+                margin,
+                padding,
+                border,
+                content_width,
+                border_height: metrics.border_height,
+                start,
+                end: self.boxes.len(),
+                height_declared: declared_height.is_some(),
+                forced_height: None,
+            });
+        }
+
+        // The line's cross size: a declared height makes it definite for a row, and a
+        // column's cross axis is the container's content width, which is always definite.
+        let line_cross = finite_non_negative(match direction {
+            FlexDirection::Row => definite_height
+                .unwrap_or_else(|| items.iter().map(FlexItem::outer_height).fold(0.0, f32::max)),
+            FlexDirection::Column => containing.width,
+        });
+
+        // `stretch` gives an item without a declared height the line's cross size. The
+        // block content has already been laid out from the item's content top, so
+        // growing the box afterwards only moves its bottom edge.
+        if direction == FlexDirection::Row && align == AlignItems::Stretch {
+            for item in &mut items {
+                if item.height_declared {
+                    continue;
+                }
+                let target = finite_non_negative(
+                    line_cross
+                        - item.margin.vertical()
+                        - item.padding.vertical()
+                        - item.border.vertical(),
+                );
+                item.forced_height = Some(target);
+                item.border_height = target + item.padding.vertical() + item.border.vertical();
+            }
+        }
+
+        let sum_main: f32 = items
+            .iter()
+            .map(|item| match direction {
+                FlexDirection::Row => item.outer_width(),
+                FlexDirection::Column => item.outer_height(),
+            })
+            .sum();
+        let gaps = gap * (items.len().saturating_sub(1)) as f32;
+        let main_size = match direction {
+            FlexDirection::Row => containing.width,
+            // A column without a declared height is sized by its content, so there is
+            // no free space for `justify-content` to distribute.
+            FlexDirection::Column => definite_height.unwrap_or(sum_main + gaps),
+        };
+        let free = finite_non_negative(main_size - sum_main - gaps);
+        let (leading, between) = justify_offsets(justify, free, items.len());
+
+        let mut children = Vec::with_capacity(items.len());
+        let mut cursor = match direction {
+            FlexDirection::Row => containing.x,
+            FlexDirection::Column => top,
+        } + leading;
+        for item in &items {
+            if let Some(forced) = item.forced_height {
+                let boxed = &mut self.boxes[item.start];
+                let rect = boxed.rect;
+                let content = boxed.content;
+                boxed.rect = Rect::new(
+                    rect.origin.x,
+                    rect.origin.y,
+                    rect.size.w,
+                    forced + item.padding.vertical() + item.border.vertical(),
+                );
+                boxed.content =
+                    Rect::new(content.origin.x, content.origin.y, content.size.w, forced);
+            }
+            let outer_main = match direction {
+                FlexDirection::Row => item.outer_width(),
+                FlexDirection::Column => item.outer_height(),
+            };
+            let outer_cross = match direction {
+                FlexDirection::Row => item.outer_height(),
+                FlexDirection::Column => item.outer_width(),
+            };
+            let offset = match align {
+                AlignItems::FlexStart | AlignItems::Stretch => 0.0,
+                AlignItems::Center => (line_cross - outer_cross) / 2.0,
+                AlignItems::FlexEnd => line_cross - outer_cross,
+            };
+            let main_start = cursor
+                + match direction {
+                    FlexDirection::Row => item.margin.left,
+                    FlexDirection::Column => item.margin.top,
+                };
+            let cross_start = match direction {
+                FlexDirection::Row => top,
+                FlexDirection::Column => containing.x,
+            } + offset
+                + match direction {
+                    FlexDirection::Row => item.margin.top,
+                    FlexDirection::Column => item.margin.left,
+                };
+            let (planned_x, planned_y) = match direction {
+                FlexDirection::Row => (main_start, cross_start),
+                FlexDirection::Column => (cross_start, main_start),
+            };
+            self.translate_subtree(
+                item.start..item.end,
+                planned_x - (containing.x + item.margin.left),
+                planned_y - top,
+            );
+            children.push(item.start);
+            cursor += outer_main + gap + between;
+        }
+
+        let used_height = match direction {
+            FlexDirection::Row => line_cross,
+            FlexDirection::Column => definite_height.unwrap_or(sum_main + gaps),
+        };
+        (children, used_height)
+    }
+
+    /// Collects the flex items of a container, flattening document fragments.
+    ///
+    /// Every element that is not `display: none` is an item — including an inline
+    /// element, which a flex container blockifies — and every bare text node becomes its
+    /// own anonymous item. Comments are skipped, and so is whitespace-only text: CSS
+    /// drops it, and HTML authors put it between elements on purpose; keeping it would
+    /// add a zero-width item and an extra gap between the real ones.
+    fn collect_flex_items(&self, node: NodeId, items: &mut Vec<FlexNode>) {
+        for child in self.document.children(node) {
+            self.collect_flex_item(child, items);
+        }
+    }
+
+    /// Appends one child's contribution to the flex item list.
+    fn collect_flex_item(&self, node: NodeId, items: &mut Vec<FlexNode>) {
+        match self.document.kind(node) {
+            NodeKind::Text(content) => {
+                if content
+                    .chars()
+                    .any(|character| !is_collapsible_whitespace(character))
+                {
+                    items.push(FlexNode {
+                        node,
+                        anonymous_text: true,
+                    });
+                }
+            }
+            NodeKind::Comment(_) => {}
+            // A detached document fragment is not reachable through `children`, but a
+            // hand-built document can nest one; hoist its children as items.
+            NodeKind::Document => {
+                for child in self.document.children(node) {
+                    self.collect_flex_item(child, items);
+                }
+            }
+            NodeKind::Element(_) => {
+                if self.styles.display(node) != Display::None {
+                    items.push(FlexNode {
+                        node,
+                        anonymous_text: false,
+                    });
+                }
+            }
+        }
+    }
+
+    /// Approximates the max-content width of a flex item, in CSS pixels.
+    ///
+    /// The approximation is deliberately shallow: only the item's own inline content is
+    /// measured, as if it were one line. Block-level descendants do not contribute, so
+    /// an item whose content is only blocks has no intrinsic width and collapses to its
+    /// padding and border. Real intrinsic sizing (and the `min-content`/`max-content`
+    /// keywords) is out of scope for this increment.
+    fn max_content_width(&mut self, node: NodeId, anonymous_text: bool) -> f32 {
+        let mut tokens = Vec::new();
+        if anonymous_text {
+            self.collect_text(node, &[], &mut tokens);
+        } else {
+            for item in self.collect_flow(node) {
+                if let Flow::Text {
+                    node: text_node,
+                    inline,
+                } = item
+                {
+                    self.collect_text(text_node, &inline, &mut tokens);
+                }
+            }
+        }
+        let mut width = 0.0;
+        let mut pending_space = 0.0;
+        for token in &tokens {
+            match token {
+                Token::Word {
+                    text,
+                    font_size,
+                    weight,
+                    family,
+                    ..
+                } => {
+                    width += pending_space
+                        + finite_non_negative(
+                            self.text.measure_styled(text, *font_size, *weight, family),
+                        );
+                    pending_space = 0.0;
+                }
+                Token::Space {
+                    font_size,
+                    weight,
+                    family,
+                    ..
+                } => {
+                    if width > 0.0 {
+                        pending_space = finite_non_negative(
+                            self.text.measure_styled(" ", *font_size, *weight, family),
+                        );
+                    }
+                }
+            }
+        }
+        width
+    }
+
+    /// Lays out a bare text node as an anonymous flex item.
+    ///
+    /// The item's box is the text node itself, so the box tree stays traceable back to
+    /// the document; its children are the text fragments of the run.
+    fn layout_text_item(
+        &mut self,
+        node: NodeId,
+        containing: ContainingBlock,
+        top: f32,
+    ) -> BlockMetrics {
+        let index = self.boxes.len();
+        self.boxes.push(LayoutBox {
+            node,
+            rect: Rect::EMPTY,
+            content: Rect::EMPTY,
+            children: Vec::new(),
+            text: None,
+        });
+        let mut state = FlowState {
+            cursor: top,
+            children: Vec::new(),
+            pending_margin: None,
+        };
+        let mut tokens = Vec::new();
+        self.collect_text(node, &[], &mut tokens);
+        self.flush_inline(&mut tokens, containing, &mut state);
+        let height = finite_non_negative(state.cursor - top);
+        let rect = Rect::new(containing.x, top, containing.width, height);
+        self.boxes[index] = LayoutBox {
+            node,
+            rect,
+            content: rect,
+            children: state.children,
+            text: None,
+        };
+        BlockMetrics {
+            index,
+            border_height: height,
+        }
+    }
+
+    /// Moves every box of one item's subtree by `(dx, dy)` in document space.
+    ///
+    /// The subtree is a contiguous range because layout appends a box and then
+    /// everything below it; [`FlexItem::start`] and [`FlexItem::end`] bracket it.
+    fn translate_subtree(&mut self, range: std::ops::Range<usize>, dx: f32, dy: f32) {
+        if dx == 0.0 && dy == 0.0 {
+            return;
+        }
+        for boxed in &mut self.boxes[range] {
+            boxed.rect = translate_rect(boxed.rect, dx, dy);
+            boxed.content = translate_rect(boxed.content, dx, dy);
+            if let Some(run) = &mut boxed.text {
+                run.origin = Point::new(run.origin.x + dx, run.origin.y + dy);
+            }
+        }
+    }
+
     /// Flattens the children of `node` into inline and block-level items.
     ///
-    /// Inline elements are transparent: their text is emitted in place, so it joins the
-    /// surrounding run, and a block-level descendant is hoisted to the nearest block
-    /// ancestor, which is what an anonymous-block split would do.
+    /// Inline elements are transparent at the flow level: their text is emitted in
+    /// place, so it joins the surrounding run, and a block-level descendant is hoisted to
+    /// the nearest block ancestor, which is what an anonymous-block split would do. The
+    /// inline elements themselves become boxes per line, added in [`Self::flush_inline`].
     fn collect_flow(&self, node: NodeId) -> Vec<Flow> {
         let mut items = Vec::new();
         for child in self.document.children(node) {
@@ -543,7 +1086,7 @@ impl Layouter<'_> {
             }
             NodeKind::Element(_) => match self.styles.display(node) {
                 Display::None => {}
-                Display::Block => items.push(Flow::Block(node)),
+                Display::Block | Display::Flex => items.push(Flow::Block(node)),
                 Display::Inline => {
                     let mut nested = inline.to_vec();
                     nested.push(node);
@@ -853,6 +1396,55 @@ mod tests {
         assert_eq!(collapse_margins(0.0, 30.0), 30.0);
         assert_eq!(collapse_margins(30.0, 0.0), 30.0);
         assert_eq!(collapse_margins(12.5, 12.5), 12.5);
+    }
+
+    #[test]
+    fn justify_offsets_distribute_the_free_space() {
+        // 500px free after three items.
+        assert_eq!(
+            justify_offsets(JustifyContent::FlexStart, 500.0, 3),
+            (0.0, 0.0)
+        );
+        assert_eq!(
+            justify_offsets(JustifyContent::FlexEnd, 500.0, 3),
+            (500.0, 0.0)
+        );
+        assert_eq!(
+            justify_offsets(JustifyContent::Center, 500.0, 3),
+            (250.0, 0.0)
+        );
+        let (leading, between) = justify_offsets(JustifyContent::SpaceBetween, 500.0, 3);
+        assert_eq!((leading, between), (0.0, 250.0));
+        let (leading, between) = justify_offsets(JustifyContent::SpaceAround, 500.0, 3);
+        assert!((leading - 500.0 / 6.0).abs() < 1.0e-5);
+        assert!((between - 500.0 / 3.0).abs() < 1.0e-5);
+    }
+
+    #[test]
+    fn justify_offsets_handle_a_single_item() {
+        // `space-between` packs one item at the start, `space-around` centres it.
+        assert_eq!(
+            justify_offsets(JustifyContent::SpaceBetween, 100.0, 1),
+            (0.0, 0.0)
+        );
+        assert_eq!(
+            justify_offsets(JustifyContent::SpaceAround, 100.0, 1),
+            (50.0, 100.0)
+        );
+    }
+
+    #[test]
+    fn translate_rect_preserves_the_extents() {
+        let rect = Rect::new(1.0, 2.0, 3.5, 4.5);
+        assert_eq!(
+            translate_rect(rect, 10.0, 20.0),
+            Rect::new(11.0, 22.0, 3.5, 4.5)
+        );
+        assert_eq!(translate_rect(rect, 0.0, 0.0), rect);
+        assert_eq!(
+            translate_rect(rect, -1.0, -2.0),
+            Rect::new(0.0, 0.0, 3.5, 4.5)
+        );
     }
 
     #[test]

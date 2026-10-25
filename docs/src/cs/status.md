@@ -29,6 +29,16 @@ Co je hotové, co je ověřené a co se záměrně ještě nedělá. Každý ř�
 | Inkrementální seam | hotovo | `jkva-shell::Frame` vrací `DamageRegion`; layout je zatím celodokumentový |
 | Dokumentace a ADR aktuální | hotovo | tato stránka, `docs/`, `CHANGELOG.md` |
 
+## M2 — flex (podmnožina, rozpracováno)
+
+| Položka | Stav | Důkaz |
+|---|---|---|
+| Flex formátovací kontext | hotovo | `layout_flex_content`; row/column, 5 justify režimů, 4 align režimy, gap |
+| Flex dostupný z enginu | hotovo | shell mapuje `display: flex` na `Display::Flex` |
+| Korpusová stránka se zlatým obrázkem | hotovo | `examples/flex.html`, `examples/expected/flex.png` |
+| Wrap, grow/shrink/basis, order, align-self | zatím ne | další krok M2 |
+| Grid, tabulky, floaty, obrázky, scroll, hit testing, vrstvy | zatím ne | M2 |
+
 ## Známé mezery (poctivý seznam)
 
 Nejsou schované; jsou to úkoly M2+.
@@ -37,6 +47,6 @@ Nejsou schované; jsou to úkoly M2+.
 - **Layout je celodokumentový průchod.** Inkrementální je dnes jen damage.
 - **Cena kaskády** je 1,94 ms na fixture se 602 uzly a je v [Performance baseline](performance.md).
 
-## Další: M2
+## Další
 
-Flex, grid, tabulky, floaty, obrázky, scroll, hit-testing, vrstvy a stacking contexts. Tabulka milníků je v záznamu rozhodnutí.
+Flex wrap, grow/shrink a basis, pak grid, tabulky, floaty, obrázky, scroll, hit-testing, vrstvy a stacking contexts. Tabulka milníků je v záznamu rozhodnutí.

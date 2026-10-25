@@ -457,6 +457,8 @@ fn named_color(name: &str) -> Option<[u8; 3]> {
 pub fn layout_display(display: DisplayType) -> Display {
     if display.is_none() {
         Display::None
+    } else if display == DisplayType::Flex {
+        Display::Flex
     } else if display.is_inline() {
         Display::Inline
     } else {
@@ -522,6 +524,6 @@ mod tests {
         assert_eq!(layout_display(DisplayType::Block), Display::Block);
         assert_eq!(layout_display(DisplayType::Inline), Display::Inline);
         assert_eq!(layout_display(DisplayType::None), Display::None);
-        assert_eq!(layout_display(DisplayType::Flex), Display::Block);
+        assert_eq!(layout_display(DisplayType::Flex), Display::Flex);
     }
 }

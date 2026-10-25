@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Flexbox</title>
+    <style>
+      body { margin: 24px; font-family: "Helvetica"; color: #111827; }
+      h1 { font-size: 24px; margin: 0 0 16px 0; color: #1d4ed8; }
+      h2 { font-size: 18px; margin: 24px 0 8px 0; }
+      .row { display: flex; gap: 16px; justify-content: space-between; align-items: center; height: 80px; }
+      .card { background-color: #eef2ff; padding: 8px; border: 1px solid #6366f1; }
+      .center { display: flex; gap: 8px; justify-content: center; align-items: center; height: 60px; }
+      .pill { background-color: #fde68a; padding: 4px 8px; }
+      .column { display: flex; flex-direction: column; gap: 8px; }
+      .bar { background-color: #dbeafe; padding: 4px 8px; }
+    </style>
+  </head>
+  <body>
+    <h1>Flexbox</h1>
+    <h2>Row, space-between, stretch</h2>
+    <div class="row">
+      <div class="card">One</div>
+      <div class="card">Two</div>
+      <div class="card">Three</div>
+    </div>
+    <h2>Row, centre</h2>
+    <div class="center">
+      <span class="pill">alpha</span>
+      <span class="pill">beta</span>
+      <span class="pill">gamma</span>
+    </div>
+    <h2>Column with gap</h2>
+    <div class="column">
+      <div class="bar">first</div>
+      <div class="bar">second</div>
+      <div class="bar">third</div>
+    </div>
+  </body>
+</html>

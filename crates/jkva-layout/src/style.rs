@@ -25,19 +25,30 @@
 
 use jkva_dom::NodeId;
 
-/// The subset of `display` values that M1 layout understands.
+/// The `display` values that layout distinguishes.
 ///
-/// Everything else (`flex`, `grid`, `table-*`, `list-item`, `inline-block`,
-/// `contents`, …) has to be mapped by the engine to one of these three for now; a
-/// box that behaves like a block maps to [`Display::Block`], anything inline-level
-/// maps to [`Display::Inline`]. M2 replaces this enum with the full display model.
+/// Everything else (`grid`, `table-*`, `list-item`, `inline-block`, `contents`, …) has
+/// to be mapped by the engine to one of these; a box that behaves like a block maps to
+/// [`Display::Block`], anything inline-level maps to [`Display::Inline`]. Later
+/// milestones replace this enum with the full display model.
+///
+/// `inline-flex` is **not** represented: the engine currently maps it to
+/// [`Display::Inline`], so it is flattened into the surrounding inline flow instead of
+/// becoming a flex container. Mapping it to [`Display::Flex`] would make it behave as a
+/// block-level flex container, which is the documented fallback until inline-level flex
+/// containers exist.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum Display {
     /// `display: none` — the element and its subtree generate no boxes.
     None,
     /// `display: block` — the element is laid out in block flow.
     Block,
-    /// `display: inline` — flattened into the inline flow of the nearest block.
+    /// `display: flex` — a block-level single-line flex container.
+    ///
+    /// Its children become flex items and are laid out by the flex algorithm instead
+    /// of block flow; see `jkva_layout::engine` for the modelled subset.
+    Flex,
+    /// `display: inline` — an inline box inside the nearest block's inline flow.
     ///
     /// This is the CSS initial value, and therefore the default.
     #[default]

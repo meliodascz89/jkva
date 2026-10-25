@@ -8,7 +8,7 @@
 
 JKva is an early-stage browser engine: its own DOM, style system, layout engine, rasterizer, compositor and event loop — no inherited twenty-year-old C++ layer, no Chromium fork.
 
-**Status: M1 — the first page renders.** Metal clear renders, the MSL triangle and display-list rectangles work, HTML parses through html5ever, CSS parses and the cascade produces computed styles. There is no layout engine yet and no code path from an HTML file to pixels; the first rendered page is milestone M1.
+**Status: M2 — flexbox (subset).** HTML parses through html5ever, CSS is parsed and cascaded, block, inline and flex layout run in `jkva-layout`, text is shaped and rasterized, and Metal presents the frame. `examples/hello.html`, `cards.html` and `flex.html` render in the screenshot corpus with goldens. Flex supports row/column, `justify-content`, `align-items` and `gap`; wrap, grow/shrink and basis are not implemented yet.
 
 ![The first page rendered by JKva](docs/images/first-page.png)
 

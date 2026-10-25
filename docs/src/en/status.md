@@ -29,6 +29,16 @@ What is done, what is verified, and what is deliberately not done yet. Every lin
 | Incremental seam | done | `jkva-shell::Frame` returns a `DamageRegion`; layout is still a full pass |
 | Documentation and ADRs current | done | this page, `docs/`, `CHANGELOG.md` |
 
+## M2 — flex (subset, in progress)
+
+| Item | Status | Evidence |
+|---|---|---|
+| Flex formatting context | done | `layout_flex_content`; row/column, 5 justify modes, 4 align modes, gap |
+| Flex reachable from the engine | done | the shell maps `display: flex` to `Display::Flex` |
+| Corpus page with a golden | done | `examples/flex.html`, `examples/expected/flex.png` |
+| Wrap, grow/shrink/basis, order, align-self | not yet | next M2 increment |
+| Grid, tables, floats, images, scroll, hit testing, layers | not yet | M2 |
+
 ## Known gaps (honest list)
 
 These are not hidden; they are the M2+ work.
@@ -37,6 +47,6 @@ These are not hidden; they are the M2+ work.
 - **Layout is a full-document pass.** Only damage is incremental today.
 - **Cascade cost** is 1.94 ms on the 602-node fixture and documented in [Performance baseline](performance.md).
 
-## Next: M2
+## Next
 
-Flex, grid, tables, floats, images, scrolling, hit testing, layers and stacking contexts. See the milestone table in the decision record.
+Flex wrap, grow/shrink and basis, then grid, tables, floats, images, scrolling, hit testing, layers and stacking contexts. See the milestone table in the decision record.
