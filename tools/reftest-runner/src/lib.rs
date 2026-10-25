@@ -26,7 +26,8 @@ pub struct Case {
 ///
 /// Returns an error when the directory cannot be read.
 pub fn discover(dir: &Path) -> Result<Vec<Case>, String> {
-    let entries = std::fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
+    let entries =
+        std::fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
     let mut cases = Vec::new();
     for entry in entries {
         let entry = entry.map_err(|e| format!("cannot read an entry: {e}"))?;
@@ -34,7 +35,11 @@ pub fn discover(dir: &Path) -> Result<Vec<Case>, String> {
         if path.extension().and_then(|e| e.to_str()) != Some("html") {
             continue;
         }
-        let Some(stem) = path.file_stem().and_then(|s| s.to_str()).map(str::to_string) else {
+        let Some(stem) = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .map(str::to_string)
+        else {
             continue;
         };
         cases.push(Case {

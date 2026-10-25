@@ -34,10 +34,16 @@ fn parse() -> Args {
         match flag.as_str() {
             "--update" => args.update = true,
             "--width" => {
-                args.width = it.next().and_then(|v| v.parse().ok()).unwrap_or_else(|| usage());
+                args.width = it
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or_else(|| usage());
             }
             "--height" => {
-                args.height = it.next().and_then(|v| v.parse().ok()).unwrap_or_else(|| usage());
+                args.height = it
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or_else(|| usage());
             }
             _ => usage(),
         }
@@ -93,7 +99,10 @@ fn main() -> ExitCode {
 
         if args.update {
             if let Err(e) = std::fs::copy(&actual, &case.expected) {
-                eprintln!("reftest-runner: cannot update {}: {e}", case.expected.display());
+                eprintln!(
+                    "reftest-runner: cannot update {}: {e}",
+                    case.expected.display()
+                );
                 return ExitCode::from(2);
             }
             println!("UPDATE {}", case.name);
