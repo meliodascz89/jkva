@@ -12,6 +12,7 @@ authors.workspace = true
 workspace = true
 
 [dependencies]
+jkva-paint = { path = "../jkva-paint" }
 objc2.workspace = true
 objc2-foundation.workspace = true
 objc2-metal.workspace = true
