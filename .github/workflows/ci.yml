@@ -35,7 +35,7 @@ jobs:
       # checked on the macOS job only.
       - run: >
           cargo check
-          -p jkva-core -p jkva-net -p jkva-dom -p jkva-style -p jkva-layout
+          -p jkva-core -p jkva-ipc -p jkva-net -p jkva-dom -p jkva-style -p jkva-layout
           -p jkva-text -p jkva-paint -p jkva-js -p jkva-api -p jkva-engine
           -p reftest-diff -p wpt-report -p reftest-runner -p bench-runner -p wpt-reftest-runner
 
