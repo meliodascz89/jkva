@@ -28,7 +28,8 @@ use jkva_dom::{Document, NodeId, NodeKind};
 use jkva_engine::parse_page;
 use jkva_gfx::{Image, Scene, SceneItem, TextureData, render_scene};
 use jkva_layout::{
-    Display, Edges, LayoutTree, StyleSource, TextMeasure, Viewport as LayoutViewport, layout,
+    Display, Edges, LayoutTree, Length, StyleSource, TextMeasure, Viewport as LayoutViewport,
+    layout,
 };
 use jkva_paint::{DamageRegion, Rect as PaintRect};
 use jkva_style::{ComputedStyle, ComputedStyleMap, StyleEngine, Stylesheet};
@@ -36,7 +37,10 @@ use jkva_text::{FontCache, TextStyle};
 
 mod values;
 
-pub use values::{layout_display, parse_border_width, parse_color, parse_font_size, parse_length};
+pub use values::{
+    layout_display, parse_border_width, parse_color, parse_font_size, parse_length,
+    parse_length_value,
+};
 
 /// Version of the reference shell.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -235,9 +239,11 @@ impl<'a> Styles<'a> {
         }
     }
 
-    fn declared(&self, node: NodeId, pick: impl Fn(&ComputedStyle) -> &str) -> Option<f32> {
-        let style = self.map.get(node)?;
-        parse_length(pick(style), self.font_px(node))
+    fn declared_length(&self, node: NodeId, pick: impl Fn(&ComputedStyle) -> &str) -> Length {
+        let Some(style) = self.map.get(node) else {
+            return Length::Auto;
+        };
+        parse_length_value(pick(style), self.font_px(node))
     }
 
     /// Resolves `font-size` for an element, or inherits it for a text node.
@@ -331,12 +337,12 @@ impl StyleSource for Styles<'_> {
             .map_or(Display::Inline, |style| layout_display(style.display))
     }
 
-    fn width(&self, node: NodeId) -> Option<f32> {
-        self.declared(node, |s| &s.width)
+    fn width(&self, node: NodeId) -> Length {
+        self.declared_length(node, |s| &s.width)
     }
 
-    fn height(&self, node: NodeId) -> Option<f32> {
-        self.declared(node, |s| &s.height)
+    fn height(&self, node: NodeId) -> Length {
+        self.declared_length(node, |s| &s.height)
     }
 
     fn margin(&self, node: NodeId) -> Edges {
@@ -546,6 +552,24 @@ mod tests {
         <div id="a" class="box">A</div>
         <div id="b">B</div>
     "#;
+
+    #[test]
+    fn percentage_width_resolves_against_the_containing_block() {
+        let frame = Frame::new(
+            "<style>#half { width: 50% }</style><div id=\"half\">x</div>",
+            400,
+            600,
+        )
+        .unwrap();
+        let node = frame.element_by_id("half").unwrap();
+        let rect = frame.layout.box_for(node).unwrap().rect;
+        // The UA body margin is 8px on each side, so the containing width is 384.
+        assert!(
+            (rect.width() - 192.0).abs() < 0.5,
+            "expected 192px, got {}",
+            rect.width()
+        );
+    }
 
     #[test]
     fn a_fresh_frame_has_no_damage() {

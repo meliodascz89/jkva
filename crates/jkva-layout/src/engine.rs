@@ -61,14 +61,14 @@ use crate::tree::{LayoutBox, LayoutTree, Viewport};
 ///
 /// ```
 /// use jkva_dom::{Document, NodeId};
-/// use jkva_layout::{Display, Edges, StyleSource, TextMeasure, Viewport, layout};
+/// use jkva_layout::{Display, Edges, Length, StyleSource, TextMeasure, Viewport, layout};
 ///
 /// struct Blocky;
 ///
 /// impl StyleSource for Blocky {
 ///     fn display(&self, _node: NodeId) -> Display { Display::Block }
-///     fn width(&self, _node: NodeId) -> Option<f32> { None }
-///     fn height(&self, _node: NodeId) -> Option<f32> { None }
+///     fn width(&self, _node: NodeId) -> Length { Length::Auto }
+///     fn height(&self, _node: NodeId) -> Length { Length::Auto }
 ///     fn margin(&self, _node: NodeId) -> Edges { Edges::ZERO }
 ///     fn padding(&self, _node: NodeId) -> Edges { Edges::ZERO }
 ///     fn border(&self, _node: NodeId) -> Edges { Edges::ZERO }
@@ -425,11 +425,9 @@ impl Layouter<'_> {
         let border_x = containing.x + margin.left;
         // An explicit width is a content-box width; `auto` fills the containing block
         // minus the horizontal margins.
-        let border_box_width = match self.styles.width(node) {
-            Some(width) if width.is_finite() && width >= 0.0 => {
-                width + padding.horizontal() + border.horizontal()
-            }
-            _ => finite_non_negative(containing.width - margin.horizontal()),
+        let border_box_width = match self.styles.width(node).resolve(Some(containing.width)) {
+            Some(width) => width + padding.horizontal() + border.horizontal(),
+            None => finite_non_negative(containing.width - margin.horizontal()),
         };
         let inner_width =
             finite_non_negative(border_box_width - padding.horizontal() - border.horizontal());
@@ -448,7 +446,7 @@ impl Layouter<'_> {
             width: inner_width,
         };
         let (children, children_height) = self.layout_content(node, inner, content_top);
-        let content_height = match self.styles.height(node) {
+        let content_height = match self.styles.height(node).resolve(None) {
             Some(height) if height.is_finite() && height >= 0.0 => height,
             _ => children_height,
         };
@@ -667,6 +665,7 @@ impl Layouter<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::style::Length;
 
     /// A style source with fixed values, used to exercise the pure helpers.
     struct FixedStyle {
@@ -694,12 +693,12 @@ mod tests {
             }
         }
 
-        fn width(&self, _node: NodeId) -> Option<f32> {
-            None
+        fn width(&self, _node: NodeId) -> Length {
+            Length::Auto
         }
 
-        fn height(&self, _node: NodeId) -> Option<f32> {
-            None
+        fn height(&self, _node: NodeId) -> Length {
+            Length::Auto
         }
 
         fn margin(&self, _node: NodeId) -> Edges {

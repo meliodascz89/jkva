@@ -31,14 +31,14 @@
 //!
 //! ```
 //! use jkva_dom::{Document, NodeId};
-//! use jkva_layout::{Display, Edges, StyleSource, TextMeasure, Viewport, layout};
+//! use jkva_layout::{Display, Edges, Length, StyleSource, TextMeasure, Viewport, layout};
 //!
 //! struct Blocky;
 //!
 //! impl StyleSource for Blocky {
 //!     fn display(&self, _node: NodeId) -> Display { Display::Block }
-//!     fn width(&self, _node: NodeId) -> Option<f32> { None }
-//!     fn height(&self, _node: NodeId) -> Option<f32> { None }
+//!     fn width(&self, _node: NodeId) -> Length { Length::Auto }
+//!     fn height(&self, _node: NodeId) -> Length { Length::Auto }
 //!     fn margin(&self, _node: NodeId) -> Edges { Edges::ZERO }
 //!     fn padding(&self, _node: NodeId) -> Edges { Edges::ZERO }
 //!     fn border(&self, _node: NodeId) -> Edges { Edges::ZERO }
@@ -138,7 +138,7 @@ pub mod tree;
 
 pub use engine::layout;
 pub use geometry::{Point, Rect, Size};
-pub use style::{Display, Edges, StyleSource};
+pub use style::{Display, Edges, Length, StyleSource};
 pub use text::{LINE_HEIGHT_FACTOR, TextMeasure, TextRun};
 pub use tree::{LayoutBox, LayoutTree, Viewport};
 

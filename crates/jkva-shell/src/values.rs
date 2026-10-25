@@ -4,7 +4,7 @@
 //! is the honest minimum: physical lengths and the colours the fixtures use.
 //! Percentages and unknown units return `None` instead of guessing.
 
-use jkva_layout::Display;
+use jkva_layout::{Display, Length};
 use jkva_style::DisplayType;
 
 /// Parses a CSS length into pixels.
@@ -61,6 +61,27 @@ fn split_unit(value: &str) -> Option<(&str, &str)> {
         return None;
     }
     Some(value.split_at(split))
+}
+
+/// Parses a declared width/height into a layout [`Length`].
+///
+/// `auto`, keywords and percentages resolve to what layout can use; unknown units
+/// fall back to `Auto` rather than to a wrong number.
+#[must_use]
+pub fn parse_length_value(value: &str, base: f32) -> Length {
+    let value = value.trim().to_ascii_lowercase();
+    if value.is_empty()
+        || matches!(
+            value.as_str(),
+            "auto" | "none" | "inherit" | "initial" | "unset" | "revert"
+        )
+    {
+        return Length::Auto;
+    }
+    if let Some(percent) = value.strip_suffix('%') {
+        return percent.trim().parse().map_or(Length::Auto, Length::Percent);
+    }
+    parse_length(&value, base).map_or(Length::Auto, Length::Px)
 }
 
 /// Parses a border width, including the `thin`/`medium`/`thick` keywords.
@@ -173,6 +194,14 @@ mod tests {
         assert_eq!(parse_font_size("medium", 10.0), 16.0);
         assert_eq!(parse_font_size("smaller", 20.0), 16.0);
         assert_eq!(parse_font_size("nonsense", 14.0), 14.0);
+    }
+
+    #[test]
+    fn length_values() {
+        assert_eq!(parse_length_value("50%", 16.0), Length::Percent(50.0));
+        assert_eq!(parse_length_value("200px", 16.0), Length::Px(200.0));
+        assert_eq!(parse_length_value("auto", 16.0), Length::Auto);
+        assert_eq!(parse_length_value("banana", 16.0), Length::Auto);
     }
 
     #[test]

@@ -44,6 +44,46 @@ pub enum Display {
     Inline,
 }
 
+/// A declared size: an absolute length, a percentage of the containing block, or auto.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum Length {
+    /// `auto` — the used size comes from the formatting context.
+    #[default]
+    Auto,
+    /// An absolute length in CSS pixels.
+    Px(f32),
+    /// A percentage of the containing block's width (or height where definite).
+    Percent(f32),
+}
+
+impl Length {
+    /// Creates an absolute length.
+    #[must_use]
+    pub const fn px(value: f32) -> Self {
+        Self::Px(value)
+    }
+
+    /// Creates a percentage.
+    #[must_use]
+    pub const fn percent(value: f32) -> Self {
+        Self::Percent(value)
+    }
+
+    /// Resolves the length against `base`, or `None` when it cannot be resolved.
+    ///
+    /// Percentages need a definite base; negative and non-finite values resolve to
+    /// `None` so they behave like `auto` instead of corrupting the box tree.
+    #[must_use]
+    pub fn resolve(self, base: Option<f32>) -> Option<f32> {
+        let value = match self {
+            Self::Auto => return None,
+            Self::Px(value) => value,
+            Self::Percent(percent) => base? * percent / 100.0,
+        };
+        (value.is_finite() && value >= 0.0).then_some(value)
+    }
+}
+
 /// The four margins, paddings or border widths of one box, in CSS pixels.
 ///
 /// A single struct is used for margins, paddings and borders because layout treats
@@ -154,19 +194,21 @@ pub trait StyleSource {
     /// Only called for elements; text nodes are always inline-level content.
     fn display(&self, node: NodeId) -> Display;
 
-    /// Returns the explicit width of a box in CSS pixels, or `None` for `auto`.
+    /// Returns the declared content width.
     ///
     /// The value is a **content-box** width: padding and border are added on top by
-    /// layout, matching the CSS `box-sizing: content-box` default. `min-width`,
-    /// `max-width` and percentages are not modelled yet.
-    fn width(&self, node: NodeId) -> Option<f32>;
+    /// layout, matching the CSS `box-sizing: content-box` default. Percentages are
+    /// resolved by layout against the containing block's width; `min-width` and
+    /// `max-width` are not modelled yet.
+    fn width(&self, node: NodeId) -> Length;
 
-    /// Returns the explicit height of a box in CSS pixels, or `None` for `auto`.
+    /// Returns the declared content height.
     ///
-    /// Like [`StyleSource::width`] this is a content-box height. An explicit height
-    /// wins over the height of the children, so content overflows the box; overflow
-    /// handling does not exist in M1.
-    fn height(&self, node: NodeId) -> Option<f32>;
+    /// Like [`StyleSource::width`] this is a content-box height. A percentage height
+    /// resolves against a definite containing height; M1 has no definite parent
+    /// height, so percentages behave like `auto`. An explicit height wins over the
+    /// content, so content overflows; overflow does not exist in M1.
+    fn height(&self, node: NodeId) -> Length;
 
     /// Returns the margins of a box in CSS pixels.
     ///
@@ -260,5 +302,14 @@ mod tests {
         assert_eq!(clamp(-0.001), 0.0);
         assert_eq!(clamp(f32::NEG_INFINITY), 0.0);
         assert_eq!(clamp(f32::NAN), 0.0);
+    }
+
+    #[test]
+    fn lengths_resolve_against_a_base() {
+        assert_eq!(Length::Auto.resolve(Some(400.0)), None);
+        assert_eq!(Length::px(12.0).resolve(None), Some(12.0));
+        assert_eq!(Length::percent(50.0).resolve(Some(400.0)), Some(200.0));
+        assert_eq!(Length::percent(50.0).resolve(None), None);
+        assert_eq!(Length::px(-1.0).resolve(None), None);
     }
 }
