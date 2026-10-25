@@ -12,3 +12,11 @@ authors.workspace = true
 workspace = true
 
 [dependencies]
+objc2.workspace = true
+objc2-foundation.workspace = true
+objc2-metal.workspace = true
+png.workspace = true
+
+[[bin]]
+name = "gfx-clear"
+path = "src/bin/gfx-clear.rs"
