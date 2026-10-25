@@ -23,4 +23,4 @@ JKva je Cargo workspace s jednou cratí na vrstvu. Závislosti ukazují jen dol�
 - Žádná crate nad `jkva-platform` nesmí záviset na macOS frameworcích.
 - Žádné `unsafe` bez komentáře `// SAFETY:`; Miri běží nad unsafe povrchem.
 - Veřejné položky mají dokumentaci; `missing_docs` je chyba.
-- Změna hranic je ADR. Viz [`briefing/DECISIONS.md`](https://github.com/jkva/jkva/blob/main/briefing/DECISIONS.md).
+- Změna hranic je ADR. Viz [`briefing/DECISIONS.md`](https://github.com/meliodascz89/jkva/blob/main/briefing/DECISIONS.md).

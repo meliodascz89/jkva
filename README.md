@@ -1,12 +1,14 @@
 **English** | [Čeština](README.cs.md)
 
+[![ci](https://github.com/meliodascz89/jkva/actions/workflows/ci.yml/badge.svg)](https://github.com/meliodascz89/jkva/actions/workflows/ci.yml)
+
 # JKva
 
 > A browser engine written from scratch in Rust. Apple Silicon first, megabytes last.
 
 JKva is an early-stage browser engine: its own DOM, style system, layout engine, rasterizer, compositor and event loop — no inherited twenty-year-old C++ layer, no Chromium fork.
 
-**Status: M0 — foundations.** The engine does not render a page yet; the first pixels are milestone M1. What works today is the repository, the CI, the documentation skeleton and a Metal probe that runs on Apple Silicon.
+**Status: M0 — foundations.** Metal clear renders, the MSL triangle and display-list rectangles work, HTML parses through html5ever, CSS parses and the cascade produces computed styles. There is no layout engine yet and no code path from an HTML file to pixels; the first rendered page is milestone M1.
 
 ## What is in the repository
 

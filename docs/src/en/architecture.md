@@ -23,4 +23,4 @@ JKva is a Cargo workspace with one crate per layer. Dependencies point only down
 - No crate above `jkva-platform` may depend on macOS frameworks.
 - No `unsafe` without a `// SAFETY:` comment; Miri runs on the unsafe surface.
 - Public items are documented; `missing_docs` is denied.
-- Boundary changes are ADRs. See [`briefing/DECISIONS.md`](https://github.com/jkva/jkva/blob/main/briefing/DECISIONS.md).
+- Boundary changes are ADRs. See [`briefing/DECISIONS.md`](https://github.com/meliodascz89/jkva/blob/main/briefing/DECISIONS.md).

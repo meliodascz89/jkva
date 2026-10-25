@@ -1,10 +1,10 @@
 # Přispívání
 
-Krátká verze je v [`CONTRIBUTING.md`](https://github.com/jkva/jkva/blob/main/CONTRIBUTING.md). Tahle stránka přidává pravidla specifická pro engine.
+Krátká verze je v [`CONTRIBUTING.md`](https://github.com/meliodascz89/jkva/blob/main/CONTRIBUTING.md). Tahle stránka přidává pravidla specifická pro engine.
 
 ## Změna rozhodnutí
 
-Architektonická rozhodnutí jsou v [`briefing/DECISIONS.md`](https://github.com/jkva/jkva/blob/main/briefing/DECISIONS.md). Pokud změna odporuje některému z nich, napiš nejdřív nové ADR do `decisions/` a prober ho v pull requestu. Kód následuje ADR, nikdy naopak.
+Architektonická rozhodnutí jsou v [`briefing/DECISIONS.md`](https://github.com/meliodascz89/jkva/blob/main/briefing/DECISIONS.md). Pokud změna odporuje některému z nich, napiš nejdřív nové ADR do `decisions/` a prober ho v pull requestu. Kód následuje ADR, nikdy naopak.
 
 ## Testy, které mají váhu
 

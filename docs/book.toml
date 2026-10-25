@@ -7,5 +7,5 @@ src = "src"
 [output.html]
 default-theme = "light"
 preferred-dark-theme = "navy"
-git-repository-url = "https://github.com/jkva/jkva"
-edit-url-template = "https://github.com/jkva/jkva/edit/main/docs/src/{path}"
+git-repository-url = "https://github.com/meliodascz89/jkva"
+edit-url-template = "https://github.com/meliodascz89/jkva/edit/main/docs/src/{path}"

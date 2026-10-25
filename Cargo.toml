@@ -7,8 +7,8 @@ version = "0.0.0"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/jkva/jkva"
-homepage = "https://jkva.dev"
+repository = "https://github.com/meliodascz89/jkva"
+homepage = "https://github.com/meliodascz89/jkva"
 authors = ["JKva contributors"]
 
 [workspace.dependencies]

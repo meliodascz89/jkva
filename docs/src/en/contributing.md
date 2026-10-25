@@ -1,10 +1,10 @@
 # Contributing
 
-The short version is in [`CONTRIBUTING.md`](https://github.com/jkva/jkva/blob/main/CONTRIBUTING.md). This page adds the rules that are specific to the engine.
+The short version is in [`CONTRIBUTING.md`](https://github.com/meliodascz89/jkva/blob/main/CONTRIBUTING.md). This page adds the rules that are specific to the engine.
 
 ## Changing a decision
 
-Architecture decisions are recorded in [`briefing/DECISIONS.md`](https://github.com/jkva/jkva/blob/main/briefing/DECISIONS.md). If a change contradicts one of them, write a new ADR in `decisions/` first and discuss it in the pull request. The code follows the ADR, never the other way around.
+Architecture decisions are recorded in [`briefing/DECISIONS.md`](https://github.com/meliodascz89/jkva/blob/main/briefing/DECISIONS.md). If a change contradicts one of them, write a new ADR in `decisions/` first and discuss it in the pull request. The code follows the ADR, never the other way around.
 
 ## Tests that count
 
