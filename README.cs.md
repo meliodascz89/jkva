@@ -8,11 +8,20 @@
 
 JKva je raná fáze browser engine: vlastní DOM, stylovací systém, layout, rasterizér, kompozitor i event loop — žádná zděděná dvacet let stará C++ vrstva, žádný fork Chromia.
 
-**Stav: M2 — flexbox (podmnožina).** HTML se parsuje přes html5ever, CSS se parsuje a kaskáduje, blokový, inline a flex layout běží v `jkva-layout`, text se shapeuje a rasterizuje a Metal frame prezentuje. `examples/hello.html`, `cards.html` a `flex.html` se vykreslují v korpusu se zlatými obrázky. Flex umí row/column, `justify-content`, `align-items` a `gap`; wrap, grow/shrink a basis zatím ne.
+**Stav: M2 — flexbox (podmnožina).** HTML se parsuje přes html5ever, CSS se parsuje a kaskáduje, blokový, inline a flex layout běží v `jkva-layout`, text se shapeuje a rasterizuje a Metal frame prezentuje. `examples/hello.html`, `cards.html` a `flex.html` se vykreslují v korpusu se zlatými obrázky. Flex umí row/column, `justify-content`, `align-items`, `align-self` a `gap`; wrap, grow/shrink a basis jsou další krok.
 
 ![The first page rendered by JKva](docs/images/first-page.png)
 
 *První stránka vykreslená JKvou od začátku do konce: náš DOM, naše kaskáda, náš blokový layout, náš text a Metal. `examples/hello.html`, 800×600.*
+
+## Kde právě jsme (2026-10-25)
+
+- **M0 hotové** — repozitář, CI, dokumentace EN+CS, 24 ADR, Metal walking skeleton, IPC kontrakty (`jkva-ipc`) a harness: reftest diff, corpus runner, WPT report, WPT reftesty, benchmarky.
+- **M1 hotové** — HTML → DOM → CSS kaskáda → blokový, inline a flex layout → shapeovaný text → Metal → PNG; tři zlaté stránky; seam pro damage; WPT reftest runner s publikovanými limity.
+- **M2 rozpracované** — flexbox: `row`/`column`, `justify-content`, `align-items`, `align-self`, `gap`. Další: wrap, `flex-grow`/`shrink`/`basis`.
+- 57 testovacích sad zelených, CI zelené, kaskáda ~1,94 ms na fixture se 602 uzly.
+
+Kontrolovatelný seznam s důkazy a známými mezerami je [`docs/src/cs/status.md`](docs/src/cs/status.md) ([anglicky](docs/src/en/status.md)).
 
 ## Co v repozitáři je
 
@@ -40,6 +49,14 @@ Toolchain, cíle a CI jsou popsané v [`docs/src/cs/building.md`](docs/src/cs/bu
 - [`briefing/DECISIONS.md`](briefing/DECISIONS.md) — 24 ADR: rozsah, architektura, měření, tým.
 - [`briefing/BRIEFING-0.1.cs.md`](briefing/BRIEFING-0.1.cs.md) — 99 otázek a zvolené odpovědi.
 - [`briefing/ANSWERS.md`](briefing/ANSWERS.md) — odpovědi včetně odchylek od doporučení.
+
+## Podpora projektu
+
+JKva nemá paywall, tokeny, placené funkce ani roadmapu na prodej. Pokud i tak chceš vývoj podpořit, jediná adresa je:
+
+**Bitcoin (BIP84, native segwit):** `bc1qg9y4mwhc4c5ekexc4nfr6vxynfq0m8nq9vqqj2`
+
+Dar není nákup: nekupuje funkce, prioritu ani vliv na architekturu. Projekt zůstává veřejný pod dvojí licencí a každé rozhodnutí zůstává v [`briefing/DECISIONS.md`](briefing/DECISIONS.md).
 
 ## Licence
 

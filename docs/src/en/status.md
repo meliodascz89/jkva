@@ -1,3 +1,10 @@
+## Session state (2026-10-25, end of day)
+
+- Last code commit: `f3997d3` (`align-self`), CI green; this documentation update follows it.
+- M0 and M1 are closed. M2 is in progress.
+- Working tree is clean. The partial `flex-wrap`/`grow` work was stopped and reverted instead of being left half-finished, so the next developer starts from a green tree.
+- Next step: flex wrap plus `flex-grow`/`flex-shrink`/`flex-basis` (four cascade properties and a line-breaking pass in `layout_flex_content`), then grid and tables.
+
 # Milestone status
 
 What is done, what is verified, and what is deliberately not done yet. Every line points at code or a document you can inspect.
@@ -21,7 +28,7 @@ What is done, what is verified, and what is deliberately not done yet. Every lin
 |---|---|---|
 | HTML → DOM | done | `jkva-dom`, html5ever 0.40; 38 tests |
 | CSS parse, selector matching, cascade, UA sheet | done | `jkva-style`; 157 tests |
-| Block and inline layout | done | `jkva-layout`; 49 tests; inline boxes, percentages, auto centring, wrapping |
+| Block and inline layout | done | `jkva-layout`; 73 tests including flex; inline boxes, percentages, auto centring, wrapping |
 | Text shaping and glyph rasterization | done | `jkva-text`, fontdb + harfrust + swash; 21 tests |
 | Raster + compositing path | done | `jkva-gfx` scene renderer, alpha blending |
 | Screenshot harness with golden pages | done | `examples/hello.html`, `examples/cards.html`, `tools/reftest-runner` |

@@ -1,3 +1,10 @@
+## Stav na konci dne (2026-10-25)
+
+- Poslední kódový commit: `f3997d3` (`align-self`), CI zelené; tahle aktualizace dokumentace jde po něm.
+- M0 a M1 jsou uzavřené. M2 je rozpracované.
+- Pracovní strom je čistý. Rozpracovaný `flex-wrap`/`grow` byl zastaven a vrácen, místo aby zůstal napůl hotový; další vývojář startuje ze zeleného stromu.
+- Další krok: flex wrap plus `flex-grow`/`flex-shrink`/`flex-basis` (čtyři vlastnosti v kaskádě a zalamování řádků v `layout_flex_content`), pak grid a tabulky.
+
 # Stav milníků
 
 Co je hotové, co je ověřené a co se záměrně ještě nedělá. Každý řádek ukazuje na kód nebo dokument, který si můžeš otevřít.
@@ -21,7 +28,7 @@ Co je hotové, co je ověřené a co se záměrně ještě nedělá. Každý ř�
 |---|---|---|
 | HTML → DOM | hotovo | `jkva-dom`, html5ever 0.40; 38 testů |
 | CSS parser, matching, kaskáda, UA sheet | hotovo | `jkva-style`; 157 testů |
-| Blokový a inline layout | hotovo | `jkva-layout`; 49 testů; inline boxy, procenta, auto centrování, zalamování |
+| Blokový a inline layout | hotovo | `jkva-layout`; 73 testů včetně flexu; inline boxy, procenta, auto centrování, zalamování |
 | Shaping a rasterizace glyfů | hotovo | `jkva-text`, fontdb + harfrust + swash; 21 testů |
 | Raster a kompozice | hotovo | `jkva-gfx` scéna, alpha blending |
 | Screenshot harness se zlatými stránkami | hotovo | `examples/hello.html`, `examples/cards.html`, `tools/reftest-runner` |
