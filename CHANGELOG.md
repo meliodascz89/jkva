@@ -14,4 +14,4 @@ All notable changes to this project are documented here. The format follows [Kee
 - `tools/wpt-report`: Web Platform Tests pass-rate summary and CI gate.
 - `jkva-core`: generational arena with typed, opaque ids and stale-handle detection.
 - `jkva-gfx`: Metal 4 device probe, offscreen clear render and GPU readback (`Image`), plus the `gfx-clear` PNG probe.
-- The decision record: 99 answered questions and 24 ADRs.
+- The decision record: 99 answered questions and 25 ADRs.

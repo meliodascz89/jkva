@@ -31,7 +31,7 @@ Toolchain, cíle a CI jsou popsané v [`docs/src/cs/building.md`](docs/src/cs/bu
 
 ## Kde jsou rozhodnutí
 
-- [`briefing/DECISIONS.md`](briefing/DECISIONS.md) — 24 ADR: rozsah, architektura, měření, tým.
+- [`briefing/DECISIONS.md`](briefing/DECISIONS.md) — 25 ADR: rozsah, architektura, měření, tým.
 - [`briefing/BRIEFING-0.1.cs.md`](briefing/BRIEFING-0.1.cs.md) — 99 otázek a zvolené odpovědi.
 - [`briefing/ANSWERS.md`](briefing/ANSWERS.md) — odpovědi včetně odchylek od doporučení.
 
