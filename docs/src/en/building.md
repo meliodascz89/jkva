@@ -34,7 +34,8 @@ If it prints `Metal is not available`, the engine can still build and run its CP
 
 ## CI
 
-- macOS job: format, clippy, tests, docs on Apple Silicon.
-- Linux job: `cargo check` for the portable crates (`jkva-platform` and `jkva-shell` are macOS-only).
+- macOS job: formatting, clippy, tests and rustdoc on Apple Silicon.
+- Linux job: `cargo check` for the portable crates (`jkva-platform` and `jkva-shell` are macOS-only). Both tools in `tools/` are checked here as well.
+- Docs job: builds this book with mdBook, so a bad `book.toml` or `SUMMARY.md` fails the change instead of the reader.
 
 The self-hosted M4 runner is used for benchmarks, not for every pull request.

@@ -1,8 +1,10 @@
+[English](../en/index.md) | **Čeština**
+
 # JKva
 
 JKva je browser engine psaný od nuly v Rustu pro Apple Silicon. Není to fork Chromia a neobaluje existující engine.
 
-Projekt je ve fázi **M0 (základy)**. Repo, CI a platformní probe existují; první vykreslená stránka je milník M1.
+Projekt je ve fázi **M0 (základy)**. Repo, CI a probe z `jkva-platform` existují; první vykreslená stránka přijde v M1.
 
 ## Principy
 
@@ -15,5 +17,6 @@ Projekt je ve fázi **M0 (základy)**. Repo, CI a platformní probe existují; p
 
 - [Architektura](architecture.md) — co která crate vlastní.
 - [Sestavení](building.md) — jak zkompilovat a spustit probe.
+- [Nástroje](tools.md) — dva nástroje pro příkazovou řádku: referenční testy a výsledky WPT.
 - [Přispívání](contributing.md) — jak poslat změnu.
 - [`briefing/DECISIONS.md`](https://github.com/jkva/jkva/blob/main/briefing/DECISIONS.md) — 24 ADR, na kterých to celé stojí.

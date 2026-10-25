@@ -3,7 +3,6 @@ title = "JKva"
 authors = ["JKva contributors"]
 language = "en"
 src = "src"
-multilingual = false
 
 [output.html]
 default-theme = "light"

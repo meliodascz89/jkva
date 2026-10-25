@@ -1,8 +1,10 @@
+**English** | [Čeština](../cs/index.md)
+
 # JKva
 
 JKva is a browser engine written from scratch in Rust for Apple Silicon. It is not a Chromium fork and it does not wrap an existing engine.
 
-The project is in **M0 (foundations)**. The repository, CI and the platform probe exist; the first rendered page is milestone M1.
+The project is at **M0 (foundations)**. The repository, CI and the platform probe exist; the first rendered page arrives in M1.
 
 ## Principles
 
@@ -15,5 +17,6 @@ The project is in **M0 (foundations)**. The repository, CI and the platform prob
 
 - [Architecture](architecture.md) — what each crate owns.
 - [Building](building.md) — how to compile and run the probe.
+- [Tools](tools.md) — the two command-line programs for reference tests and WPT results.
 - [Contributing](contributing.md) — how to send a change.
 - [`briefing/DECISIONS.md`](https://github.com/jkva/jkva/blob/main/briefing/DECISIONS.md) — the 24 ADRs behind all of it.

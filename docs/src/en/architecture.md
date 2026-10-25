@@ -1,6 +1,6 @@
 # Architecture
 
-JKva is a Cargo workspace with one crate per layer. Dependencies point downwards only; `jkva-core` knows nothing about the platform, and `jkva-platform` is the only crate that touches macOS frameworks.
+JKva is a Cargo workspace with one crate per layer. Dependencies point only downwards; `jkva-core` knows nothing about the platform, and `jkva-platform` is the only crate that touches macOS frameworks.
 
 | Crate | Owns |
 |---|---|

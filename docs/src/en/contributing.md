@@ -16,3 +16,5 @@ Architecture decisions are recorded in [`briefing/DECISIONS.md`](https://github.
 ## Documentation
 
 Public items are documented in English. User-facing guides exist in English and Czech; when you change behaviour, update both or the Czech page will silently rot. The Czech page is allowed to be shorter, but it must not contradict the English one.
+
+This book is built with `mdbook build docs`; the `docs` CI job runs the same command. Be aware that mdBook does not check whether a link points at a page that exists. A typo builds cleanly and 404s in the browser, so follow the links yourself before you push.
