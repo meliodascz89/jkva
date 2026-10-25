@@ -114,3 +114,17 @@ Poškozený vstup ukončí běh kódem `2` a jednou řádkou na stderr: chyběj�
 ## Zatím to není brána
 
 Oba nástroje jsou psané jako brány a oba kompiluje linuxový CI job; jejich unit testy běží v rámci `cargo test --workspace` na macOS. Ani jeden ale zatím není zapojený do workflow, které by umělo shodit pull request, protože není co měřit: repo nemá korpus referenčních obrázků ani běh WPT k sumarizaci. ADR-023 uvádí reference-test diff i WPT runner mezi CI pluginy, takže ber návratové kódy výše jako kontrakt, ke kterému nástroje směřují — ne jako slib, co dnes `main` vynucuje.
+
+## reftest-runner
+
+Vykreslí každé `*.html` v adresáři korpusu přes `jkva-shot` a porovná výsledek
+s `expected/<název>.png`.
+
+```bash
+cargo run -p jkva-shell --bin jkva-shot -- examples/hello.html examples/expected/hello.png
+cargo run -p reftest-runner -- examples          # ok / FAIL pro každou stránku
+cargo run -p reftest-runner -- examples --update # obnoví zlaté obrázky
+```
+
+Návratové kódy: `0` vše sedí, `1` rozdíly nebo chybějící obrázky, `2` chyba.
+Pomocí `JKVA_SHOT` lze použít jiný renderer; výchozí je `target/debug/jkva-shot`.

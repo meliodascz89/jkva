@@ -1,0 +1,16 @@
+[package]
+name = "reftest-runner"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+description = "Screenshot corpus runner for JKva reference tests"
+
+[lints]
+workspace = true
+
+[dependencies]
+reftest-diff = { path = "../reftest-diff" }

@@ -114,3 +114,18 @@ Malformed input ends the run with exit `2` and one line on stderr: a missing fil
 ## Not a gate yet
 
 Both tools are written to be gates and both are compiled by the Linux CI job; their unit tests run as part of `cargo test --workspace` on macOS. Neither is wired into a workflow that can fail a pull request, because there is nothing to measure yet: the repository has no reference-image corpus to diff and no WPT run to summarise. ADR-023 lists the reference-test diff and the WPT runner among the CI plugins, so treat the exit codes above as the contract these tools are being built to — not as a promise about what `main` enforces today.
+
+## reftest-runner
+
+Renders every `*.html` in a corpus directory with `jkva-shot` and compares the
+result to `expected/<name>.png`.
+
+```bash
+cargo run -p jkva-shell --bin jkva-shot -- examples/hello.html examples/expected/hello.png
+cargo run -p reftest-runner -- examples          # ok / FAIL per page
+cargo run -p reftest-runner -- examples --update # refresh the golden images
+```
+
+Exit codes: `0` all match, `1` differences or missing images, `2` error. Set
+`JKVA_SHOT` to use a different renderer binary; the default is
+`target/debug/jkva-shot`.
