@@ -18,9 +18,24 @@
 //! tree  ──►  matches(&Document, NodeId, &Selector) -> bool     matching
 //!
 //! sheets + tree  ──►  StyleEngine::compute_styles -> ComputedStyleMap
-//!                      sorted by (important, specificity, source order),
+//!                      sorted by (origin, !important, specificity, source order),
 //!                      shorthands expanded, inheritance applied
 //! ```
+//!
+//! # Cascade origins
+//!
+//! [`StyleEngine::new`] loads the built-in user-agent sheet
+//! ([`ua::USER_AGENT_CSS`]) first; author sheets added afterwards are in a
+//! stronger origin. The ordering follows CSS Cascade:
+//!
+//! ```text
+//! weakest ─ UA normal < author normal < author !important < UA !important ─ strongest
+//! ```
+//!
+//! So `p { margin: 3px }` in an author sheet beats the UA `p { margin: 1em 0 }`
+//! at equal specificity, while a UA `!important` declaration beats the page.
+//! Only the author and user-agent origins exist: there is no user origin, no
+//! animation origin and no transitions, and there are no cascade layers.
 //!
 //! * [`Stylesheet::parse`] produces [`Rule`]s and [`AtRule`]s in source order and
 //!   reports everything it dropped as a [`ParseWarning`].
@@ -57,9 +72,13 @@
 //! assert_eq!(style.display, DisplayType::Block);
 //! assert_eq!(style.margin_top, "1px");
 //! assert_eq!(style.margin_left, "2px");
-//! // `color` is inherited, so the child picks it up without a rule of its own.
+//! // `color` is inherited, so the child picks it up from the author rule.
 //! let span = document.first_child(app).unwrap();
 //! assert_eq!(styles.get(span).unwrap().color, "navy");
+//! // ...and the user-agent sheet still gives the span its inline box.
+//! assert_eq!(styles.get(span).unwrap().display, DisplayType::Inline);
+//! // `styles` iterates in document order, so snapshots are deterministic.
+//! assert!(styles.len() > 4);
 //! ```
 //!
 //! # Deliberately not implemented yet
@@ -77,8 +96,11 @@
 //!   `font`, `border` and every other shorthand or property is ignored — so
 //!   `background: red` does **not** set `background-color`, and shorthand
 //!   expansion exists only for `margin` and `padding`.
-//! * There is no user-agent stylesheet: a `<div>` computes to
-//!   `display: inline`, not `block`.
+//! * The user-agent sheet is deliberately small ([`ua::USER_AGENT_CSS`]): block
+//!   and inline element types, hidden metadata elements, the heading scale and
+//!   list indentation. `table` and `li` are `block` rather than `table` /
+//!   `list-item` until the table and list box trees exist, and there is no UA
+//!   font stack, no system colours and no form-control styling.
 //!
 //! ## Selectors
 //!
@@ -118,7 +140,8 @@
 //!
 //! * Matching is a linear scan over all rules for every element; there is no rule
 //!   index, no invalidation, no style sharing and no incremental restyle.
-//! * [`ComputedStyleMap`] iteration order is unspecified.
+//! * [`ComputedStyleMap`] iterates in document order and is deterministic, so
+//!   snapshot tests can compare it directly.
 //!
 //! # Invariants
 //!
@@ -139,6 +162,7 @@ mod parser;
 pub mod selector;
 pub mod specificity;
 pub mod stylesheet;
+pub mod ua;
 
 pub use crate::cascade::{ComputedStyleMap, StyleEngine};
 pub use crate::computed::{ComputedStyle, DisplayType};

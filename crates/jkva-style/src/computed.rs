@@ -228,9 +228,16 @@ impl Default for ComputedStyle {
 impl ComputedStyle {
     /// The initial value of every tracked property.
     ///
-    /// These are the CSS initial values, with two approximations documented in
-    /// [`crate::cascade`]: `color` starts as `black` because system colours are
-    /// not implemented, and `font-family` starts empty.
+    /// These are the CSS initial values, with three documented approximations:
+    ///
+    /// * `color` is `black` — CSS says `canvastext`, a system colour, and system
+    ///   colours are not implemented.
+    /// * `font-family` is the empty string, meaning "the user-agent default",
+    ///   because there is no UA font stack yet.
+    /// * `font-size` is `16px` rather than the keyword `medium`, because `medium`
+    ///   computes to 16px under the standard default font settings and this crate
+    ///   does not absolutise declared lengths yet. A declared `font-size: medium`
+    ///   does stay the text `medium`; see [`crate::cascade`].
     #[must_use]
     pub fn initial() -> Self {
         Self {
@@ -247,7 +254,7 @@ impl ComputedStyle {
             padding_right: "0".to_owned(),
             padding_bottom: "0".to_owned(),
             padding_left: "0".to_owned(),
-            font_size: "medium".to_owned(),
+            font_size: "16px".to_owned(),
             font_weight: "normal".to_owned(),
             font_family: String::new(),
         }
@@ -311,7 +318,7 @@ mod tests {
         assert_eq!(style.background_color, "transparent");
         assert_eq!(style.width, "auto");
         assert_eq!(style.margin_top, "0");
-        assert_eq!(style.font_size, "medium");
+        assert_eq!(style.font_size, "16px");
         assert_eq!(style.font_weight, "normal");
         assert!(style.font_family.is_empty());
         assert_eq!(

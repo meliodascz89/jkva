@@ -63,8 +63,10 @@ fn every_tracked_property_computes_from_a_declaration() {
 }
 
 #[test]
-fn unmatched_elements_get_the_initial_values() {
-    let document = parse_html(r#"<div id="box">x</div>"#);
+fn elements_the_user_agent_sheet_does_not_know_keep_the_initial_values() {
+    // A custom element is matched by neither the UA sheet nor the author sheet,
+    // so every property keeps its initial value.
+    let document = parse_html(r#"<x-widget id="box">x</x-widget>"#);
     let engine = engine_of("p { color: red }");
     let styles = engine.compute_styles(&document);
 
@@ -138,10 +140,12 @@ fn important_beats_specificity() {
 
 #[test]
 fn inherited_properties_come_from_the_parent() {
+    // `x-child` is deliberately not an element the UA sheet styles, so the
+    // "not inherited" assertions below cannot pass because of a UA rule.
     let document = parse_html(
         r#"<div id="parent">
-             <span id="child">x</span>
-             <span id="other" class="own">y</span>
+             <x-child id="child">x</x-child>
+             <x-child id="other" class="own">y</x-child>
            </div>"#,
     );
     let engine = engine_of(
@@ -414,8 +418,15 @@ fn unknown_properties_and_unexpanded_shorthands_are_ignored() {
 fn an_invalid_display_value_is_dropped() {
     let document = parse_html("<p id=target>x</p>");
 
-    // Alone, an invalid keyword leaves the initial value in place.
+    // Alone, an invalid keyword is dropped, so the user-agent `p { display: block }`
+    // is what remains — not the initial `inline`.
     let engine = engine_of("p { display: bogus }");
+    let style = style_of(&document, &engine.compute_styles(&document), "target");
+    assert_eq!(style.display, DisplayType::Block);
+
+    // With no UA sheet at all, the same document falls back to the initial value.
+    let mut engine = StyleEngine::without_user_agent();
+    engine.add_stylesheet(Stylesheet::parse("p { display: bogus }").unwrap());
     let style = style_of(&document, &engine.compute_styles(&document), "target");
     assert_eq!(style.display, DisplayType::Inline);
 
@@ -485,7 +496,7 @@ fn the_map_covers_exactly_the_element_nodes() {
 #[test]
 fn an_engine_without_stylesheets_computes_initial_values() {
     let document = parse_html("<p id=target>x</p>");
-    let engine = StyleEngine::new();
+    let engine = StyleEngine::without_user_agent();
     assert!(engine.sheets().is_empty());
 
     let styles = engine.compute_styles(&document);
@@ -493,4 +504,91 @@ fn an_engine_without_stylesheets_computes_initial_values() {
         style_of(&document, &styles, "target"),
         ComputedStyle::initial()
     );
+
+    // `new()` is the same engine plus the built-in user-agent sheet.
+    let engine = StyleEngine::new();
+    assert_eq!(engine.sheets().len(), 1);
+    let styles = engine.compute_styles(&document);
+    assert_eq!(
+        style_of(&document, &styles, "target").display,
+        DisplayType::Block
+    );
+}
+
+#[test]
+fn the_map_iterates_in_document_order() {
+    let document = parse_html(r#"<div id="a"><span id="b"></span><span id="c"></span></div>"#);
+    let engine = engine_of("div { color: red }");
+    let styles = engine.compute_styles(&document);
+
+    let names: Vec<String> = styles
+        .iter()
+        .filter_map(|(node, _)| {
+            document
+                .element(node)
+                .map(|element| element.name().to_owned())
+        })
+        .collect();
+    assert_eq!(names, ["html", "head", "body", "div", "span", "span"]);
+
+    let ids: Vec<Option<&str>> = styles
+        .iter()
+        .filter_map(|(node, _)| {
+            document
+                .element(node)
+                .map(|element| element.attribute("id"))
+        })
+        .collect();
+    assert_eq!(ids, [None, None, None, Some("a"), Some("b"), Some("c")]);
+}
+
+#[test]
+fn two_passes_produce_identical_maps() {
+    let document = parse_html(r#"<div id="a"></div><p id="b">x</p>"#);
+    let engine = engine_of("div { color: red } p { font-weight: 700 }");
+
+    let first = engine.compute_styles(&document);
+    let second = engine.compute_styles(&document);
+
+    assert_eq!(
+        first.iter().collect::<Vec<_>>(),
+        second.iter().collect::<Vec<_>>(),
+        "computation must be deterministic"
+    );
+    assert_eq!(first.len(), second.len());
+}
+
+#[test]
+fn a_reused_arena_slot_never_leaks_another_nodes_style() {
+    let mut document = parse_html(r#"<div id="a" class="old"></div>"#);
+    let engine = engine_of(".old { color: red } .new { color: blue }");
+
+    let old_node = by_id(&document, "a");
+    let before = engine.compute_styles(&document);
+    assert_eq!(before.get(old_node).unwrap().color, "red");
+
+    // Remove the old element and put a new one into the freed arena slot.
+    let parent = document.parent(old_node).expect("the div has a parent");
+    document.remove_node(old_node);
+    let new_node = document.create_element("div");
+    document.set_attribute(new_node, "class", "new");
+    document.append_child(parent, new_node);
+    assert_eq!(
+        new_node.index(),
+        old_node.index(),
+        "the arena should have reused the slot"
+    );
+
+    let after = engine.compute_styles(&document);
+    assert_eq!(after.get(new_node).unwrap().color, "blue");
+    // Generation checking: the stale handle must not resolve to the new node's
+    // style even though it now names the same arena index.
+    assert!(
+        after.get(old_node).is_none(),
+        "a stale handle must not read the reused slot"
+    );
+
+    // The earlier map is a snapshot of the earlier tree; it still answers for the
+    // node that existed then. Recompute to observe a removal.
+    assert_eq!(before.get(old_node).unwrap().color, "red");
 }

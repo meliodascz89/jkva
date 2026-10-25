@@ -55,7 +55,7 @@
 //!
 //! [`Stylesheet::parse`]: crate::Stylesheet::parse
 
-use std::collections::HashMap;
+use std::sync::OnceLock;
 
 use jkva_dom::{Document, NodeId};
 
@@ -65,14 +65,49 @@ use crate::matching::matches;
 use crate::selector::Selector;
 use crate::specificity::Specificity;
 use crate::stylesheet::{Rule, Stylesheet};
+use crate::ua::USER_AGENT_CSS;
 
-/// The computed style of every element of one document, keyed by node.
+/// The computed style of every element of one document.
 ///
-/// Iteration order is unspecified (the map is a `HashMap`); read individual
-/// elements with [`ComputedStyleMap::get`].
+/// Styles are stored in a flat vector indexed by the node's arena index, with the
+/// full [`NodeId`] kept alongside each entry, so a lookup is generation-checked:
+/// a handle whose arena slot has been reused by a *different* node reports `None`
+/// instead of that node's style. Iteration is in document order, which makes the
+/// map suitable for deterministic snapshot tests (ADR-016).
+///
+/// A map is a snapshot of the tree at the moment
+/// [`StyleEngine::compute_styles`] ran. A node removed afterwards still resolves
+/// to the style it had (the handle and the recorded entry still match); call
+/// `compute_styles` again to observe the removal.
+///
+/// ```
+/// use jkva_dom::parse_document;
+/// use jkva_style::{StyleEngine, Stylesheet};
+///
+/// let document = parse_document("<p id=x>hi</p>");
+/// let engine = StyleEngine::new();
+/// let styles = engine.compute_styles(&document);
+///
+/// // Iteration follows document order, so the root <html> comes first.
+/// let order: Vec<_> = styles
+///     .iter()
+///     .filter_map(|(node, _)| document.element(node).map(|e| e.name().to_owned()))
+///     .collect();
+/// assert_eq!(order, ["html", "head", "body", "p"]);
+/// ```
 #[derive(Clone, Debug, Default)]
 pub struct ComputedStyleMap {
-    styles: HashMap<NodeId, ComputedStyle>,
+    /// One slot per arena index; `None` for indices that were never styled.
+    slots: Vec<Option<StyledNode>>,
+    /// Arena indices of the styled nodes, in document order.
+    document_order: Vec<u32>,
+}
+
+/// One styled element: the handle that identifies it plus its computed style.
+#[derive(Clone, Debug)]
+struct StyledNode {
+    node: NodeId,
+    style: ComputedStyle,
 }
 
 impl ComputedStyleMap {
@@ -85,31 +120,48 @@ impl ComputedStyleMap {
     /// Returns the computed style of `node`, or `None` when it was not styled.
     ///
     /// Only elements are styled, so text and comment nodes always report `None`.
+    /// A stale handle also reports `None`: the entry is matched on the full
+    /// handle, generation included.
     #[must_use]
     pub fn get(&self, node: NodeId) -> Option<&ComputedStyle> {
-        self.styles.get(&node)
+        let styled = self.slots.get(node.index() as usize)?.as_ref()?;
+        (styled.node == node).then_some(&styled.style)
     }
 
-    /// Iterates over `(node, style)` pairs in unspecified order.
+    /// Iterates over `(node, style)` pairs in document order.
     pub fn iter(&self) -> impl Iterator<Item = (NodeId, &ComputedStyle)> {
-        self.styles.iter().map(|(node, style)| (*node, style))
+        self.document_order.iter().filter_map(|index| {
+            let styled = self.slots.get(*index as usize)?.as_ref()?;
+            Some((styled.node, &styled.style))
+        })
     }
 
     /// Number of styled elements.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.styles.len()
+        self.document_order.len()
     }
 
     /// Returns `true` when no element was styled.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.styles.is_empty()
+        self.document_order.is_empty()
     }
 
     /// Records the style of one node.
+    ///
+    /// Called in document order by [`StyleEngine::compute_styles`], which is what
+    /// makes [`ComputedStyleMap::iter`] document-ordered.
     fn insert(&mut self, node: NodeId, style: ComputedStyle) {
-        self.styles.insert(node, style);
+        let index = node.index() as usize;
+        if self.slots.len() <= index {
+            // One slot per arena index; `None` for the gap left by a removed node.
+            self.slots.resize_with(index.saturating_add(1), || None);
+        }
+        if self.slots[index].is_none() {
+            self.document_order.push(node.index());
+        }
+        self.slots[index] = Some(StyledNode { node, style });
     }
 }
 
@@ -119,9 +171,23 @@ impl ComputedStyleMap {
 /// every selector and the source-order position of every declaration, so the
 /// per-element pass does no parsing work.
 ///
+/// # Origins
+///
+/// Two cascade origins exist: the **user agent** (the built-in sheet from
+/// [`crate::ua`], loaded by [`StyleEngine::new`]) and the **author** (everything
+/// added with [`StyleEngine::add_stylesheet`]). They are ordered the way CSS
+/// Cascade requires:
+///
+/// ```text
+/// weakest ─ UA normal < author normal < author !important < UA !important ─ strongest
+/// ```
+///
+/// So an author declaration at *equal* specificity beats the UA sheet, and only a
+/// UA `!important` declaration can beat an author `!important` one.
+///
 /// ```
 /// use jkva_dom::parse_document;
-/// use jkva_style::{StyleEngine, Stylesheet};
+/// use jkva_style::{DisplayType, StyleEngine, Stylesheet};
 ///
 /// let document = parse_document("<p class=lead>hi</p>");
 /// let mut engine = StyleEngine::new();
@@ -137,12 +203,20 @@ impl ComputedStyleMap {
 ///     })
 ///     .expect("the document has a <p>");
 /// assert_eq!(styles.get(paragraph).unwrap().color, "red");
+/// // ...and the user-agent sheet still supplies the box type.
+/// assert_eq!(styles.get(paragraph).unwrap().display, DisplayType::Block);
 /// ```
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct StyleEngine {
     sheets: Vec<Stylesheet>,
     rules: Vec<IndexedRule>,
     next_order: u32,
+}
+
+impl Default for StyleEngine {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// One rule of one stylesheet, with the values the cascade needs precomputed.
@@ -152,6 +226,8 @@ struct IndexedRule {
     sheet: usize,
     /// Index into the stylesheet's rule list.
     rule: usize,
+    /// Which cascade origin the sheet belongs to.
+    origin: SheetOrigin,
     /// Specificity of each selector of the rule, in selector order.
     specificities: Vec<Specificity>,
     /// Source-order position of the rule's first declaration.
@@ -159,13 +235,34 @@ struct IndexedRule {
 }
 
 impl StyleEngine {
-    /// Creates an engine with no stylesheets.
+    /// Creates an engine with the built-in user-agent stylesheet loaded.
+    ///
+    /// Author stylesheets added afterwards are in the author origin and therefore
+    /// outrank the UA sheet for normal declarations.
     #[must_use]
     pub fn new() -> Self {
-        Self::default()
+        let mut engine = Self::without_user_agent();
+        engine.add_user_agent_stylesheet(user_agent_stylesheet());
+        engine
     }
 
-    /// Creates an engine from already parsed stylesheets, in cascade order.
+    /// Creates an engine with **no** stylesheets, not even the user-agent one.
+    ///
+    /// Useful when a caller wants to supply its own user-agent sheet, and in
+    /// tests that must isolate one origin.
+    #[must_use]
+    pub fn without_user_agent() -> Self {
+        Self {
+            sheets: Vec::new(),
+            rules: Vec::new(),
+            next_order: 0,
+        }
+    }
+
+    /// Creates an engine from already parsed author stylesheets, in cascade
+    /// order.
+    ///
+    /// The built-in user-agent sheet is loaded first, as in [`StyleEngine::new`].
     #[must_use]
     pub fn from_stylesheets<I>(sheets: I) -> Self
     where
@@ -178,17 +275,42 @@ impl StyleEngine {
         engine
     }
 
-    /// Appends a stylesheet.
+    /// Appends an author stylesheet.
     ///
     /// Stylesheets added later win ties against earlier ones, exactly as if their
     /// text had been concatenated.
     pub fn add_stylesheet(&mut self, sheet: Stylesheet) {
+        self.push_stylesheet(sheet, SheetOrigin::Author);
+    }
+
+    /// Appends a stylesheet in the user-agent origin.
+    ///
+    /// The built-in sheet is already present in an engine created by
+    /// [`StyleEngine::new`]; this is how a caller adds or replaces UA-level
+    /// rules, in particular UA `!important` declarations, which outrank every
+    /// author declaration.
+    pub fn add_user_agent_stylesheet(&mut self, sheet: Stylesheet) {
+        self.push_stylesheet(sheet, SheetOrigin::UserAgent);
+    }
+
+    /// The stylesheets the engine knows about, in insertion order.
+    ///
+    /// The built-in user-agent sheet is first when the engine was created by
+    /// [`StyleEngine::new`].
+    #[must_use]
+    pub fn sheets(&self) -> &[Stylesheet] {
+        &self.sheets
+    }
+
+    /// Indexes one stylesheet's rules into the cascade.
+    fn push_stylesheet(&mut self, sheet: Stylesheet, origin: SheetOrigin) {
         let sheet_index = self.sheets.len();
         let mut order = self.next_order;
         for (rule_index, rule) in sheet.rules().iter().enumerate() {
             self.rules.push(IndexedRule {
                 sheet: sheet_index,
                 rule: rule_index,
+                origin,
                 specificities: rule.selectors.iter().map(Selector::specificity).collect(),
                 first_declaration_order: order,
             });
@@ -197,12 +319,6 @@ impl StyleEngine {
         }
         self.next_order = order;
         self.sheets.push(sheet);
-    }
-
-    /// The stylesheets the engine knows about, in cascade order.
-    #[must_use]
-    pub fn sheets(&self) -> &[Stylesheet] {
-        &self.sheets
     }
 
     /// Computes the style of every element of `document`.
@@ -288,7 +404,7 @@ impl StyleEngine {
                 .unwrap_or_default();
             for (offset, declaration) in rule.declarations.iter().enumerate() {
                 let key = OrderKey {
-                    important: declaration.important,
+                    origin: CascadeOrigin::new(indexed.origin, declaration.important),
                     specificity,
                     order: indexed
                         .first_declaration_order
@@ -309,10 +425,70 @@ struct Candidate<'a> {
     value: &'a str,
 }
 
+/// The built-in user-agent stylesheet, parsed once per process.
+///
+/// The sheet is compiled into the binary as [`USER_AGENT_CSS`] and is covered by
+/// a unit test that it parses without warnings, so the fallback to an empty sheet
+/// is unreachable in practice.
+fn user_agent_stylesheet() -> Stylesheet {
+    static CACHED: OnceLock<Stylesheet> = OnceLock::new();
+    CACHED
+        .get_or_init(|| Stylesheet::parse(USER_AGENT_CSS).unwrap_or_default())
+        .clone()
+}
+
+/// Which origin a stylesheet belongs to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SheetOrigin {
+    /// The built-in user-agent sheet, or one a caller installed in that origin.
+    UserAgent,
+    /// Document, embedder or user stylesheets.
+    Author,
+}
+
+/// A declaration's position in the cascade's origin-and-importance ordering,
+/// from weakest to strongest.
+///
+/// The variant order *is* the tie-break order: `Ord` is derived, so a UA normal
+/// declaration sorts below an author normal one, which sorts below an author
+/// `!important` one, which sorts below a UA `!important` one. This is the
+/// "Origin and Importance" step of CSS Cascade; only these four of its eight
+/// ranks exist because there is no user origin, no animations and no
+/// transitions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum CascadeOrigin {
+    /// Normal declaration from the user-agent origin: the weakest of all.
+    UserAgentNormal,
+    /// Normal declaration from an author stylesheet.
+    AuthorNormal,
+    /// `!important` declaration from an author stylesheet.
+    AuthorImportant,
+    /// `!important` declaration from the user-agent origin: the strongest of all.
+    ///
+    /// This is the only rank that can beat an author `!important` declaration,
+    /// which is what lets a UA sheet enforce something the page cannot override.
+    UserAgentImportant,
+}
+
+impl CascadeOrigin {
+    /// Ranks a declaration by its sheet's origin and its `!important` flag.
+    const fn new(origin: SheetOrigin, important: bool) -> Self {
+        match (origin, important) {
+            (SheetOrigin::UserAgent, false) => Self::UserAgentNormal,
+            (SheetOrigin::Author, false) => Self::AuthorNormal,
+            (SheetOrigin::Author, true) => Self::AuthorImportant,
+            (SheetOrigin::UserAgent, true) => Self::UserAgentImportant,
+        }
+    }
+}
+
 /// The CSS cascade sort key, ordered from weakest to strongest.
+///
+/// Origin outranks specificity, which outranks source order. The field order is
+/// the comparison order and must not be changed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct OrderKey {
-    important: bool,
+    origin: CascadeOrigin,
     specificity: Specificity,
     order: u32,
 }
@@ -636,7 +812,10 @@ impl PropertyId {
             | Self::PaddingRight
             | Self::PaddingBottom
             | Self::PaddingLeft => "0",
-            Self::FontSize => "medium",
+            // `medium` computes to 16px under default font settings; this crate
+            // does not absolutise lengths, so the two spellings differ once a
+            // document declares `font-size: medium` explicitly.
+            Self::FontSize => "16px",
             Self::FontWeight => "normal",
             Self::FontFamily => "",
         }
@@ -807,6 +986,21 @@ mod tests {
         );
         assert_eq!(WideKeyword::from_value("red"), None);
         assert_eq!(WideKeyword::from_value("var(--x)"), None);
+    }
+
+    #[test]
+    fn every_property_initial_value_agrees_with_computed_style_initial() {
+        // `PropertyId::initial` and `ComputedStyle::initial` are two views of the
+        // same table; a mismatch would make `initial` resolve differently from an
+        // unstyled element.
+        let style = ComputedStyle::initial();
+        for property in PropertyId::ALL {
+            assert_eq!(
+                property.initial(),
+                property.value_of(&style),
+                "{property:?} disagrees with ComputedStyle::initial()"
+            );
+        }
     }
 
     #[test]
