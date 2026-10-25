@@ -1,0 +1,18 @@
+[package]
+name = "bench-runner"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+description = "Deterministic micro-benchmarks for the JKva engine layers"
+
+[lints]
+workspace = true
+
+[dependencies]
+jkva-dom = { path = "../../crates/jkva-dom" }
+jkva-style = { path = "../../crates/jkva-style" }
+jkva-text = { path = "../../crates/jkva-text" }

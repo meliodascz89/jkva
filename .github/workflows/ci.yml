@@ -37,7 +37,7 @@ jobs:
           cargo check
           -p jkva-core -p jkva-net -p jkva-dom -p jkva-style -p jkva-layout
           -p jkva-text -p jkva-paint -p jkva-js -p jkva-api -p jkva-engine
-          -p reftest-diff -p wpt-report -p reftest-runner
+          -p reftest-diff -p wpt-report -p reftest-runner -p bench-runner
 
   docs:
     name: Documentation

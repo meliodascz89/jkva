@@ -12,6 +12,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - CI: macOS format/clippy/test/docs, Linux check for portable crates.
 - `tools/reftest-diff`: deterministic pixel diff for reference tests, with diff image output.
 - `tools/wpt-report`: Web Platform Tests pass-rate summary and CI gate.
+- `tools/bench-runner`: deterministic micro-benchmarks for HTML parse, CSS parse, the cascade and text shaping, with fixture sizes in every report.
 - `tools/reftest-runner`: renders a screenshot corpus with `jkva-shot` and compares it with `reftest-diff`; `examples/hello.html` has a golden image.
 - `jkva-core`: generational arena with typed, opaque ids and stale-handle detection.
 - `jkva-shell`: paints background colours and borders (currentColor) in addition to glyphs; `examples/cards.html` covers borders, wrapping and monospace.

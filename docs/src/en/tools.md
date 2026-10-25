@@ -129,3 +129,16 @@ cargo run -p reftest-runner -- examples --update # refresh the golden images
 Exit codes: `0` all match, `1` differences or missing images, `2` error. Set
 `JKVA_SHOT` to use a different renderer binary; the default is
 `target/debug/jkva-shot`.
+
+## bench-runner
+
+Deterministic micro-benchmarks for one layer at a time.
+
+```bash
+cargo run -p bench-runner
+cargo run -p bench-runner -- --iterations 50 --rows 500 --rules 500
+cargo run -p bench-runner -- --json
+```
+
+Every report names the fixture size and the iteration count. These are not
+Speedometer numbers; they exist so a regression is visible in seconds.

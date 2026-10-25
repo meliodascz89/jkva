@@ -128,3 +128,16 @@ cargo run -p reftest-runner -- examples --update # obnoví zlaté obrázky
 
 Návratové kódy: `0` vše sedí, `1` rozdíly nebo chybějící obrázky, `2` chyba.
 Pomocí `JKVA_SHOT` lze použít jiný renderer; výchozí je `target/debug/jkva-shot`.
+
+## bench-runner
+
+Deterministické mikro-benchmarky pro jednu vrstvu najednou.
+
+```bash
+cargo run -p bench-runner
+cargo run -p bench-runner -- --iterations 50 --rows 500 --rules 500
+cargo run -p bench-runner -- --json
+```
+
+Každý report uvádí velikost fixture a počet iterací. Nejsou to čísla ze
+Speedometru; slouží k tomu, aby byl regres vidět během sekund.
