@@ -8,7 +8,11 @@
 
 JKva is an early-stage browser engine: its own DOM, style system, layout engine, rasterizer, compositor and event loop — no inherited twenty-year-old C++ layer, no Chromium fork.
 
-**Status: M0 — foundations.** Metal clear renders, the MSL triangle and display-list rectangles work, HTML parses through html5ever, CSS parses and the cascade produces computed styles. There is no layout engine yet and no code path from an HTML file to pixels; the first rendered page is milestone M1.
+**Status: M1 — the first page renders.** Metal clear renders, the MSL triangle and display-list rectangles work, HTML parses through html5ever, CSS parses and the cascade produces computed styles. There is no layout engine yet and no code path from an HTML file to pixels; the first rendered page is milestone M1.
+
+![The first page rendered by JKva](docs/images/first-page.png)
+
+*The first page rendered end to end by JKva: our DOM, our cascade, our block layout, our text shaping and Metal. `examples/hello.html`, 800×600.*
 
 ## What is in the repository
 

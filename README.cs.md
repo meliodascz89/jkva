@@ -8,7 +8,11 @@
 
 JKva je raná fáze browser engine: vlastní DOM, stylovací systém, layout, rasterizér, kompozitor i event loop — žádná zděděná dvacet let stará C++ vrstva, žádný fork Chromia.
 
-**Stav: M0 — základy.** Metal clear, MSL trojúhelník a obdélníky z display listu fungují, HTML se parsuje přes html5ever, CSS se parsuje a kaskáda počítá computed styles. Layout zatím není a neexistuje cesta z HTML souboru k pixelům; první vykreslená stránka je milník M1.
+**Stav: M1 — první stránka se vykresluje.** Metal clear, MSL trojúhelník a obdélníky z display listu fungují, HTML se parsuje přes html5ever, CSS se parsuje a kaskáda počítá computed styles. Layout zatím není a neexistuje cesta z HTML souboru k pixelům; první vykreslená stránka je milník M1.
+
+![The first page rendered by JKva](docs/images/first-page.png)
+
+*První stránka vykreslená JKvou od začátku do konce: náš DOM, naše kaskáda, náš blokový layout, náš text a Metal. `examples/hello.html`, 800×600.*
 
 ## Co v repozitáři je
 

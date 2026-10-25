@@ -12,3 +12,15 @@ authors.workspace = true
 workspace = true
 
 [dependencies]
+jkva-dom = { path = "../jkva-dom" }
+jkva-engine = { path = "../jkva-engine" }
+jkva-gfx = { path = "../jkva-gfx" }
+jkva-layout = { path = "../jkva-layout" }
+jkva-paint = { path = "../jkva-paint" }
+jkva-style = { path = "../jkva-style" }
+jkva-text = { path = "../jkva-text" }
+png.workspace = true
+
+[[bin]]
+name = "jkva-shot"
+path = "src/bin/jkva-shot.rs"

@@ -13,6 +13,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - `tools/reftest-diff`: deterministic pixel diff for reference tests, with diff image output.
 - `tools/wpt-report`: Web Platform Tests pass-rate summary and CI gate.
 - `jkva-core`: generational arena with typed, opaque ids and stale-handle detection.
+- `jkva-shell`: the M1 pipeline HTML → cascade → layout → text → Metal, and `jkva-shot` for PNG screenshots; `examples/hello.html` is the first rendered page.
 - `jkva-layout`: block and inline layout with auto/explicit widths, margins, padding, sibling margin collapse, whitespace collapsing and greedy line breaking.
 - `jkva-style`: CSS parser, structural selector model, L4 specificity, selector matching and the cascade into `ComputedStyle` (at-rule contents, `var()` and a UA stylesheet are not implemented yet).
 - `jkva-text`: font discovery (fontdb), HarfBuzz shaping (harfrust) and glyph rasterization to alpha coverage (swash), with a documented fallback chain.

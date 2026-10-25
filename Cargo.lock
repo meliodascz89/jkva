@@ -273,6 +273,16 @@ dependencies = [
 [[package]]
 name = "jkva-shell"
 version = "0.0.0"
+dependencies = [
+ "jkva-dom",
+ "jkva-engine",
+ "jkva-gfx",
+ "jkva-layout",
+ "jkva-paint",
+ "jkva-style",
+ "jkva-text",
+ "png",
+]
 
 [[package]]
 name = "jkva-style"
