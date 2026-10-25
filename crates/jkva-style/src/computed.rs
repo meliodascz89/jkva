@@ -240,6 +240,8 @@ pub struct ComputedStyle {
     pub align_items: String,
     /// The `gap` property, used for both axes. Not inherited.
     pub gap: String,
+    /// The `align-self` property; `auto` follows the container. Not inherited.
+    pub align_self: String,
     /// The `font-size` property. Inherited.
     pub font_size: String,
     /// The `font-weight` property. Inherited.
@@ -301,6 +303,7 @@ impl ComputedStyle {
             justify_content: String::new(),
             align_items: String::new(),
             gap: String::new(),
+            align_self: String::new(),
             font_size: String::new(),
             font_weight: String::new(),
             font_family: String::new(),
@@ -351,6 +354,7 @@ impl ComputedStyle {
             justify_content: "flex-start".to_owned(),
             align_items: "stretch".to_owned(),
             gap: "0".to_owned(),
+            align_self: "auto".to_owned(),
             font_size: "16px".to_owned(),
             font_weight: "normal".to_owned(),
             font_family: String::new(),

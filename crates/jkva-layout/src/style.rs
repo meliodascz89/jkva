@@ -352,6 +352,12 @@ pub trait StyleSource {
         AlignItems::Stretch
     }
 
+    /// Returns the item's own cross-axis alignment, or `None` to follow the
+    /// container's `align-items`.
+    fn align_self(&self, _node: NodeId) -> Option<AlignItems> {
+        None
+    }
+
     /// Returns the flex gap in CSS pixels, applied to both axes.
     fn gap(&self, _node: NodeId) -> f32 {
         0.0

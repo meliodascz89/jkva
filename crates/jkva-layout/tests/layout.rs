@@ -33,6 +33,7 @@ struct NodeStyle {
     justify_content: JustifyContent,
     align_items: AlignItems,
     gap: f32,
+    align_self: Option<AlignItems>,
 }
 
 impl NodeStyle {
@@ -51,6 +52,7 @@ impl NodeStyle {
         justify_content: JustifyContent::FlexStart,
         align_items: AlignItems::Stretch,
         gap: 0.0,
+        align_self: None,
     };
 
     /// An inline element: flattened by layout, so only text properties matter.
@@ -91,6 +93,11 @@ impl NodeStyle {
 
     fn with_border(mut self, border: Edges) -> Self {
         self.border = border;
+        self
+    }
+
+    fn with_align_self(mut self, align: AlignItems) -> Self {
+        self.align_self = Some(align);
         self
     }
 
@@ -208,6 +215,10 @@ impl StyleSource for MockStyles {
 
     fn gap(&self, node: NodeId) -> f32 {
         self.get(node).gap
+    }
+
+    fn align_self(&self, node: NodeId) -> Option<AlignItems> {
+        self.get(node).align_self
     }
 }
 
@@ -856,6 +867,33 @@ fn column_justify_content_distributes_a_definite_height() {
         assert_positions(ys(&tree, &items), &expected);
         assert_close(box_of(&tree, container).content.height(), 100.0);
     }
+}
+
+#[test]
+fn align_self_overrides_the_container_alignment() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let first = element(&mut document, container, "div");
+    let second = element(&mut document, container, "div");
+    let mut styles = MockStyles::new();
+    styles.set(container, NodeStyle::flex_row().with_height(100.0));
+    styles.set(
+        first,
+        NodeStyle::BLOCK
+            .with_width(10.0)
+            .with_height(20.0)
+            .with_align_self(AlignItems::FlexEnd),
+    );
+    styles.set(
+        second,
+        NodeStyle::BLOCK
+            .with_width(10.0)
+            .with_height(20.0)
+            .with_align_self(AlignItems::Center),
+    );
+    let tree = layout_with(&document, &styles, 800.0, 600.0);
+    assert_positions(ys(&tree, &[first, second]), &[80.0, 40.0]);
 }
 
 #[test]

@@ -35,6 +35,7 @@ What is done, what is verified, and what is deliberately not done yet. Every lin
 |---|---|---|
 | Flex formatting context | done | `layout_flex_content`; row/column, 5 justify modes, 4 align modes, gap |
 | Flex reachable from the engine | done | the shell maps `display: flex` to `Display::Flex` |
+| `align-self` per item | done | falls back to `align-items`; tested |
 | Corpus page with a golden | done | `examples/flex.html`, `examples/expected/flex.png` |
 | Wrap, grow/shrink/basis, order, align-self | not yet | next M2 increment |
 | Grid, tables, floats, images, scroll, hit testing, layers | not yet | M2 |

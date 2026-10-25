@@ -35,6 +35,7 @@ Co je hotové, co je ověřené a co se záměrně ještě nedělá. Každý ř�
 |---|---|---|
 | Flex formátovací kontext | hotovo | `layout_flex_content`; row/column, 5 justify režimů, 4 align režimy, gap |
 | Flex dostupný z enginu | hotovo | shell mapuje `display: flex` na `Display::Flex` |
+| `align-self` na itemu | hotovo | fallback na `align-items`; testováno |
 | Korpusová stránka se zlatým obrázkem | hotovo | `examples/flex.html`, `examples/expected/flex.png` |
 | Wrap, grow/shrink/basis, order, align-self | zatím ne | další krok M2 |
 | Grid, tabulky, floaty, obrázky, scroll, hit testing, vrstvy | zatím ne | M2 |

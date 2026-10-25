@@ -92,13 +92,14 @@ fn every_tracked_property_computes_from_a_declaration() {
 fn flex_properties_compute() {
     let document = parse_html(r#"<div id="box">x</div>"#);
     let engine = engine_of(
-        "div { flex-direction: column; justify-content: space-between; align-items: center; gap: 12px }",
+        "div { flex-direction: column; justify-content: space-between; align-items: center; gap: 12px; align-self: flex-end }",
     );
     let style = style_of(&document, &engine.compute_styles(&document), "box");
     assert_eq!(style.flex_direction, "column");
     assert_eq!(style.justify_content, "space-between");
     assert_eq!(style.align_items, "center");
     assert_eq!(style.gap, "12px");
+    assert_eq!(style.align_self, "flex-end");
 }
 
 #[test]

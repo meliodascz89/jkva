@@ -11,6 +11,8 @@
       .card { background-color: #eef2ff; padding: 8px; border: 1px solid #6366f1; }
       .center { display: flex; gap: 8px; justify-content: center; align-items: center; height: 60px; }
       .pill { background-color: #fde68a; padding: 4px 8px; }
+      .end { align-self: flex-end; }
+      .mid { align-self: center; }
       .column { display: flex; flex-direction: column; gap: 8px; }
       .bar { background-color: #dbeafe; padding: 4px 8px; }
     </style>
@@ -20,8 +22,8 @@
     <h2>Row, space-between, stretch</h2>
     <div class="row">
       <div class="card">One</div>
-      <div class="card">Two</div>
-      <div class="card">Three</div>
+      <div class="card mid">Two</div>
+      <div class="card end">Three</div>
     </div>
     <h2>Row, centre</h2>
     <div class="center">

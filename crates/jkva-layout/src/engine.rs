@@ -350,6 +350,8 @@ struct FlexItem {
     height_declared: bool,
     /// Content height forced by `stretch` once the line cross size is known.
     forced_height: Option<f32>,
+    /// Effective cross-axis alignment: `align-self` or the container's `align-items`.
+    align: AlignItems,
 }
 
 impl FlexItem {
@@ -732,7 +734,8 @@ impl Layouter<'_> {
             // A declared width wins. Otherwise a row item is sized to its max-content
             // approximation, and a column item stretches to the line unless the cross
             // axis is aligned instead of stretched.
-            let content_width = match (direction, declared_width, align) {
+            let item_align = self.styles.align_self(flex_node.node).unwrap_or(align);
+            let content_width = match (direction, declared_width, item_align) {
                 (_, Some(width), _) => width,
                 (FlexDirection::Row, None, _) => {
                     self.max_content_width(flex_node.node, flex_node.anonymous_text)
@@ -782,6 +785,7 @@ impl Layouter<'_> {
                 end: self.boxes.len(),
                 height_declared: declared_height.is_some(),
                 forced_height: None,
+                align: item_align,
             });
         }
 
@@ -796,9 +800,9 @@ impl Layouter<'_> {
         // `stretch` gives an item without a declared height the line's cross size. The
         // block content has already been laid out from the item's content top, so
         // growing the box afterwards only moves its bottom edge.
-        if direction == FlexDirection::Row && align == AlignItems::Stretch {
+        if direction == FlexDirection::Row {
             for item in &mut items {
-                if item.height_declared {
+                if item.height_declared || item.align != AlignItems::Stretch {
                     continue;
                 }
                 let target = finite_non_negative(
@@ -856,7 +860,7 @@ impl Layouter<'_> {
                 FlexDirection::Row => item.outer_height(),
                 FlexDirection::Column => item.outer_width(),
             };
-            let offset = match align {
+            let offset = match item.align {
                 AlignItems::FlexStart | AlignItems::Stretch => 0.0,
                 AlignItems::Center => (line_cross - outer_cross) / 2.0,
                 AlignItems::FlexEnd => line_cross - outer_cross,

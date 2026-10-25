@@ -441,6 +441,16 @@ impl StyleSource for Styles<'_> {
         }
     }
 
+    fn align_self(&self, node: NodeId) -> Option<AlignItems> {
+        match self.map.get(node).map(|s| s.align_self.as_str()) {
+            Some("flex-start") => Some(AlignItems::FlexStart),
+            Some("center") => Some(AlignItems::Center),
+            Some("flex-end") => Some(AlignItems::FlexEnd),
+            Some("stretch") => Some(AlignItems::Stretch),
+            _ => None,
+        }
+    }
+
     fn gap(&self, node: NodeId) -> f32 {
         self.map
             .get(node)

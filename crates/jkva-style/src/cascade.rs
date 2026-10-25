@@ -1088,6 +1088,7 @@ enum PropertyId {
     JustifyContent,
     AlignItems,
     Gap,
+    AlignSelf,
     FontSize,
     FontWeight,
     FontFamily,
@@ -1095,7 +1096,7 @@ enum PropertyId {
 
 impl PropertyId {
     /// Number of tracked properties.
-    const COUNT: usize = 32;
+    const COUNT: usize = 33;
 
     /// Every tracked property, ordered by [`PropertyId::index`].
     const ALL: [Self; Self::COUNT] = [
@@ -1128,6 +1129,7 @@ impl PropertyId {
         Self::JustifyContent,
         Self::AlignItems,
         Self::Gap,
+        Self::AlignSelf,
         Self::FontSize,
         Self::FontWeight,
         Self::FontFamily,
@@ -1165,9 +1167,10 @@ impl PropertyId {
             Self::JustifyContent => 26,
             Self::AlignItems => 27,
             Self::Gap => 28,
-            Self::FontSize => 29,
-            Self::FontWeight => 30,
-            Self::FontFamily => 31,
+            Self::AlignSelf => 29,
+            Self::FontSize => 30,
+            Self::FontWeight => 31,
+            Self::FontFamily => 32,
         }
     }
 
@@ -1205,6 +1208,7 @@ impl PropertyId {
             "justify-content" => Self::JustifyContent,
             "align-items" => Self::AlignItems,
             "gap" => Self::Gap,
+            "align-self" => Self::AlignSelf,
             "font-size" => Self::FontSize,
             "font-weight" => Self::FontWeight,
             "font-family" => Self::FontFamily,
@@ -1255,6 +1259,7 @@ impl PropertyId {
             Self::JustifyContent => "flex-start",
             Self::AlignItems => "stretch",
             Self::Gap => "0",
+            Self::AlignSelf => "auto",
             // `medium` computes to 16px under default font settings; this crate
             // does not absolutise lengths, so the two spellings differ once a
             // document declares `font-size: medium` explicitly.
@@ -1310,6 +1315,7 @@ impl PropertyId {
             Self::JustifyContent => &style.justify_content,
             Self::AlignItems => &style.align_items,
             Self::Gap => &style.gap,
+            Self::AlignSelf => &style.align_self,
             Self::FontSize => &style.font_size,
             Self::FontWeight => &style.font_weight,
             Self::FontFamily => &style.font_family,
@@ -1355,6 +1361,7 @@ impl PropertyId {
             Self::JustifyContent => style.justify_content = value.to_owned(),
             Self::AlignItems => style.align_items = value.to_owned(),
             Self::Gap => style.gap = value.to_owned(),
+            Self::AlignSelf => style.align_self = value.to_owned(),
             Self::FontSize => style.font_size = value.to_owned(),
             Self::FontWeight => style.font_weight = value.to_owned(),
             Self::FontFamily => style.font_family = value.to_owned(),
@@ -1424,6 +1431,7 @@ mod tests {
             PropertyId::JustifyContent => "justify-content",
             PropertyId::AlignItems => "align-items",
             PropertyId::Gap => "gap",
+            PropertyId::AlignSelf => "align-self",
             PropertyId::FontSize => "font-size",
             PropertyId::FontWeight => "font-weight",
             PropertyId::FontFamily => "font-family",
