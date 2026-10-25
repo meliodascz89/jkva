@@ -12,4 +12,5 @@ All notable changes to this project are documented here. The format follows [Kee
 - CI: macOS format/clippy/test/docs, Linux check for portable crates.
 - `tools/reftest-diff`: deterministic pixel diff for reference tests, with diff image output.
 - `tools/wpt-report`: Web Platform Tests pass-rate summary and CI gate.
+- `jkva-core`: generational arena with typed, opaque ids and stale-handle detection.
 - The decision record: 99 answered questions and 24 ADRs.
