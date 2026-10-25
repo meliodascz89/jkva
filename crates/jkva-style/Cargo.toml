@@ -13,3 +13,4 @@ workspace = true
 
 [dependencies]
 cssparser = "0.38"
+jkva-dom = { version = "0.0.0", path = "../jkva-dom" }

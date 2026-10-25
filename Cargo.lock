@@ -159,6 +159,7 @@ version = "0.0.0"
 name = "jkva-gfx"
 version = "0.0.0"
 dependencies = [
+ "jkva-paint",
  "objc2",
  "objc2-foundation",
  "objc2-metal",
@@ -199,6 +200,7 @@ name = "jkva-style"
 version = "0.0.0"
 dependencies = [
  "cssparser",
+ "jkva-dom",
 ]
 
 [[package]]
