@@ -12,3 +12,6 @@ authors.workspace = true
 workspace = true
 
 [dependencies]
+jkva-core = { path = "../jkva-core" }
+jkva-dom = { path = "../jkva-dom" }
+jkva-style = { path = "../jkva-style" }
