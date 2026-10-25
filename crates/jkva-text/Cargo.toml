@@ -12,3 +12,6 @@ authors.workspace = true
 workspace = true
 
 [dependencies]
+fontdb = "0.24"
+harfrust = "0.15"
+swash = "0.2"
