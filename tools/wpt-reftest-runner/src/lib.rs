@@ -88,7 +88,7 @@ fn classify(root: &Path, path: &Path) -> Option<Case> {
                 let rel: Vec<&str> = rel.split_whitespace().collect();
                 if rel.contains(&"match") || rel.contains(&"mismatch") {
                     if let Some(href) = document.get_attribute(node, "href") {
-                        reference = Some(resolve(path, &href));
+                        reference = Some(resolve(path, href));
                         mismatch = rel.contains(&"mismatch");
                     }
                 } else if rel.contains(&"stylesheet") {
