@@ -160,11 +160,23 @@ enum Token {
         font_size: f32,
         /// Text colour as straight sRGB RGBA.
         color: [u8; 4],
+        /// Font weight the word is measured at.
+        weight: u16,
+        /// Font family the word is measured at.
+        family: String,
     },
     /// One collapsible space. Consecutive spaces are merged into one.
     Space {
+        /// The text node the space came from.
+        node: NodeId,
         /// Font size the space is measured at.
         font_size: f32,
+        /// Font weight the space is measured at.
+        weight: u16,
+        /// Font family the space is measured at.
+        family: String,
+        /// Text colour of the node the space came from.
+        color: [u8; 4],
     },
 }
 
@@ -181,6 +193,10 @@ struct PendingFragment {
     font_size: f32,
     /// Text colour as straight sRGB RGBA.
     color: [u8; 4],
+    /// Font weight the fragment is measured at.
+    weight: u16,
+    /// Font family the fragment is measured at.
+    family: String,
 }
 
 /// A line being filled with fragments.
@@ -192,8 +208,8 @@ struct Line {
     width: f32,
     /// Largest font size on the line; drives the line box height.
     max_font_size: f32,
-    /// Font size of a collapsible space seen since the last word.
-    pending_space: Option<f32>,
+    /// A collapsible space seen since the last word, with its own style.
+    pending_space: Option<PendingFragment>,
 }
 
 impl Line {
@@ -213,17 +229,13 @@ impl Line {
     /// fragment that continues a line gets the separating space prepended to its text,
     /// so the space is part of the run that follows it; trailing spaces are therefore
     /// impossible and the line break does not leave them behind.
-    fn push_fragment(&mut self, mut fragment: PendingFragment, space_width: f32) {
-        let continues = self.pending_space.is_some() && !self.fragments.is_empty();
-        self.pending_space = None;
-        if continues {
-            fragment.text.insert(0, ' ');
-            fragment.width += space_width;
-        }
+    fn push_fragment(&mut self, fragment: PendingFragment) {
         if let Some(last) = self.fragments.last_mut() {
             if last.node == fragment.node
                 && last.font_size == fragment.font_size
                 && last.color == fragment.color
+                && last.weight == fragment.weight
+                && last.family == fragment.family
             {
                 last.text.push_str(&fragment.text);
                 last.width += fragment.width;
@@ -288,11 +300,24 @@ fn is_collapsible_whitespace(character: char) -> bool {
 ///
 /// Collapsing consecutive whitespace therefore happens at token level: the second,
 /// third, … space of a run is dropped, and leading whitespace produces nothing.
-fn push_space(tokens: &mut Vec<Token>, font_size: f32) {
+fn push_space(
+    tokens: &mut Vec<Token>,
+    node: NodeId,
+    font_size: f32,
+    weight: u16,
+    family: &str,
+    color: [u8; 4],
+) {
     if tokens.is_empty() || matches!(tokens.last(), Some(Token::Space { .. })) {
         return;
     }
-    tokens.push(Token::Space { font_size });
+    tokens.push(Token::Space {
+        node,
+        font_size,
+        weight,
+        family: family.to_string(),
+        color,
+    });
 }
 
 /// The layout pass: owns the output buffer and borrows its inputs.
@@ -488,6 +513,8 @@ impl Layouter<'_> {
         };
         let font_size = finite_non_negative(self.styles.font_size(node));
         let color = self.styles.color(node);
+        let weight = self.styles.font_weight(node);
+        let family = self.styles.font_family(node);
         let mut word = String::new();
         for character in content.chars() {
             if is_collapsible_whitespace(character) {
@@ -497,9 +524,11 @@ impl Layouter<'_> {
                         node,
                         font_size,
                         color,
+                        weight,
+                        family: family.clone(),
                     });
                 }
-                push_space(tokens, font_size);
+                push_space(tokens, node, font_size, weight, &family, color);
             } else {
                 word.push(character);
             }
@@ -510,6 +539,8 @@ impl Layouter<'_> {
                 node,
                 font_size,
                 color,
+                weight,
+                family,
             });
         }
     }
@@ -551,6 +582,8 @@ impl Layouter<'_> {
                         origin: Point::new(x, state.cursor),
                         font_size: fragment.font_size,
                         color: fragment.color,
+                        font_weight: fragment.weight,
+                        font_family: fragment.family,
                         width: fragment.width,
                     }),
                 });
@@ -571,9 +604,26 @@ impl Layouter<'_> {
         let mut line = Line::default();
         for token in tokens.drain(..) {
             match token {
-                Token::Space { font_size } => {
+                Token::Space {
+                    node,
+                    font_size,
+                    weight,
+                    family,
+                    color,
+                } => {
                     if !line.is_empty() {
-                        line.pending_space = Some(font_size);
+                        let width = finite_non_negative(
+                            self.text.measure_styled(" ", font_size, weight, &family),
+                        );
+                        line.pending_space = Some(PendingFragment {
+                            node,
+                            text: " ".to_string(),
+                            width,
+                            font_size,
+                            color,
+                            weight,
+                            family,
+                        });
                     }
                 }
                 Token::Word {
@@ -581,30 +631,29 @@ impl Layouter<'_> {
                     node,
                     font_size,
                     color,
+                    weight,
+                    family,
                 } => {
-                    let word_width = finite_non_negative(self.text.measure(&text, font_size));
-                    let space_width = match line.pending_space {
-                        Some(space_font_size) => {
-                            finite_non_negative(self.text.measure(" ", space_font_size))
-                        }
-                        None => 0.0,
-                    };
+                    let word_width = finite_non_negative(
+                        self.text.measure_styled(&text, font_size, weight, &family),
+                    );
+                    let space_width = line.pending_space.as_ref().map_or(0.0, |s| s.width);
                     let needed = line.width + space_width + word_width;
                     let must_break = !line.is_empty() && needed > available;
                     if must_break {
                         lines.push(std::mem::take(&mut line));
+                    } else if let Some(space) = line.pending_space.take() {
+                        line.push_fragment(space);
                     }
-                    let space_width = if must_break { 0.0 } else { space_width };
-                    line.push_fragment(
-                        PendingFragment {
-                            node,
-                            text,
-                            width: word_width,
-                            font_size,
-                            color,
-                        },
-                        space_width,
-                    );
+                    line.push_fragment(PendingFragment {
+                        node,
+                        text,
+                        width: word_width,
+                        font_size,
+                        color,
+                        weight,
+                        family,
+                    });
                 }
             }
         }

@@ -206,6 +206,21 @@ pub trait StyleSource {
     ///
     /// [`LayoutBox`]: crate::LayoutBox
     fn background_color(&self, node: NodeId) -> Option<[u8; 4]>;
+
+    /// Returns the font weight for a node. Inherited, resolved for text nodes too.
+    ///
+    /// Defaults to `400` so test doubles and simple adapters do not have to
+    /// implement it; the engine overrides it with the cascade value.
+    fn font_weight(&self, _node: NodeId) -> u16 {
+        400
+    }
+
+    /// Returns the font family for a node; the empty string means the UA default.
+    ///
+    /// Defaults to empty for the same reason as [`StyleSource::font_weight`].
+    fn font_family(&self, _node: NodeId) -> String {
+        String::new()
+    }
 }
 
 #[cfg(test)]

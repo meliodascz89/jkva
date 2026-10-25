@@ -36,6 +36,17 @@ pub const LINE_HEIGHT_FACTOR: f32 = 1.2;
 pub trait TextMeasure {
     /// Returns the advance of `text` at `font_size` CSS pixels, in CSS pixels.
     fn measure(&mut self, text: &str, font_size: f32) -> f32;
+
+    /// Measures with the text style the cascade produced.
+    ///
+    /// The default ignores the style and delegates to [`TextMeasure::measure`], so
+    /// simple implementations and test doubles keep working. The engine overrides
+    /// it to shape with the real weight and family; layout and paint then agree
+    /// about every advance.
+    fn measure_styled(&mut self, text: &str, font_size: f32, weight: u16, family: &str) -> f32 {
+        let _ = (weight, family);
+        self.measure(text, font_size)
+    }
 }
 
 /// One laid-out piece of a text node: a single line fragment.
@@ -68,6 +79,10 @@ pub struct TextRun {
     pub font_size: f32,
     /// Text colour as straight sRGB RGBA, copied from the style of the text node.
     pub color: [u8; 4],
+    /// Font weight used for measurement and painting.
+    pub font_weight: u16,
+    /// Font family used for measurement and painting; empty means the UA default.
+    pub font_family: String,
     /// Advance of this fragment in CSS pixels: the additive sum used to place the next
     /// fragment and to decide the line break.
     pub width: f32,
@@ -109,6 +124,8 @@ mod tests {
             origin: Point::new(1.0, 2.0),
             font_size: 16.0,
             color: [0, 0, 0, 255],
+            font_weight: 400,
+            font_family: String::new(),
             width: 40.0,
         };
         assert_eq!(run.text, "hello");

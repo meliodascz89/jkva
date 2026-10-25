@@ -127,6 +127,42 @@ impl<'a> Styles<'a> {
         value
     }
 
+    fn inherited_style(&self, node: NodeId) -> Option<&ComputedStyle> {
+        let mut current = Some(node);
+        while let Some(id) = current {
+            if let Some(style) = self.map.get(id) {
+                return Some(style);
+            }
+            current = self.document.parent(id);
+        }
+        None
+    }
+
+    /// Font weight for paint. Layout still measures one default face, so a
+    /// wrapped bold run can differ from the measured width until the layout
+    /// seam carries `TextStyle` (documented limitation).
+    fn weight_of(&self, node: NodeId) -> u16 {
+        match self.inherited_style(node).map(|s| s.font_weight.trim()) {
+            Some("bold" | "bolder") => 700,
+            Some("normal" | "lighter") => 400,
+            Some(value) => value.parse().unwrap_or(400),
+            None => 400,
+        }
+    }
+
+    /// Font family for paint, with the UA default when the cascade says nothing.
+    fn family_of(&self, node: NodeId) -> String {
+        let family = self
+            .inherited_style(node)
+            .map(|s| s.font_family.trim())
+            .unwrap_or("");
+        if family.is_empty() {
+            "Helvetica".to_string()
+        } else {
+            family.trim_matches('"').to_string()
+        }
+    }
+
     fn inherited_color(&self, node: NodeId) -> [u8; 4] {
         let mut current = Some(node);
         while let Some(id) = current {
@@ -212,6 +248,14 @@ impl StyleSource for Styles<'_> {
             .get(node)
             .and_then(|style| parse_color(&style.background_color))
     }
+
+    fn font_weight(&self, node: NodeId) -> u16 {
+        self.weight_of(node)
+    }
+
+    fn font_family(&self, node: NodeId) -> String {
+        self.family_of(node)
+    }
 }
 
 /// Adapter from `jkva-text` to layout's measurement trait.
@@ -221,11 +265,26 @@ struct Texts<'a> {
 
 impl TextMeasure for Texts<'_> {
     fn measure(&mut self, text: &str, font_size: f32) -> f32 {
-        let style = TextStyle {
-            size: font_size,
-            ..TextStyle::default()
-        };
+        self.measure_styled(text, font_size, 400, "")
+    }
+
+    fn measure_styled(&mut self, text: &str, font_size: f32, weight: u16, family: &str) -> f32 {
+        let style = text_style(font_size, weight, family);
         self.fonts.shape(text, &style).width
+    }
+}
+
+fn text_style(size: f32, weight: u16, family: &str) -> TextStyle {
+    let family = if family.trim().is_empty() {
+        "Helvetica".to_string()
+    } else {
+        family.trim_matches('"').to_string()
+    };
+    TextStyle {
+        family,
+        size,
+        weight,
+        italic: false,
     }
 }
 
@@ -247,10 +306,7 @@ fn build_scene(tree: &LayoutTree, styles: &Styles<'_>, fonts: &mut FontCache) ->
             }
         }
         let Some(run) = &b.text else { continue };
-        let style = TextStyle {
-            size: run.font_size,
-            ..TextStyle::default()
-        };
+        let style = text_style(run.font_size, run.font_weight, &run.font_family);
         let shaped = fonts.shape(&run.text, &style);
         let baseline = run.origin.y + shaped.ascent;
         // `ShapedGlyph.x` is a shaping offset; the pen advances by `advance`.
