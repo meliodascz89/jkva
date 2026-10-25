@@ -28,6 +28,14 @@ fn every_tracked_property_computes_from_a_declaration() {
             padding-right: 6px;
             padding-bottom: 7px;
             padding-left: 8px;
+            border-top-width: 9px;
+            border-right-width: 10px;
+            border-bottom-width: 11px;
+            border-left-width: 12px;
+            border-top-style: solid;
+            border-right-style: dashed;
+            border-bottom-style: dotted;
+            border-left-style: double;
         }
         "#,
     );
@@ -60,6 +68,37 @@ fn every_tracked_property_computes_from_a_declaration() {
         ),
         ("5px", "6px", "7px", "8px")
     );
+    assert_eq!(
+        (
+            style.border_top_width.as_str(),
+            style.border_right_width.as_str(),
+            style.border_bottom_width.as_str(),
+            style.border_left_width.as_str(),
+        ),
+        ("9px", "10px", "11px", "12px")
+    );
+    assert_eq!(
+        (
+            style.border_top_style.as_str(),
+            style.border_right_style.as_str(),
+            style.border_bottom_style.as_str(),
+            style.border_left_style.as_str(),
+        ),
+        ("solid", "dashed", "dotted", "double")
+    );
+}
+
+#[test]
+fn border_shorthand_sets_width_and_style_on_every_side() {
+    let document = parse_html(r#"<div id="box">x</div>"#);
+    let engine = engine_of("div { border: 3px solid }");
+    let style = style_of(&document, &engine.compute_styles(&document), "box");
+    assert_eq!(style.border_top_width, "3px");
+    assert_eq!(style.border_right_width, "3px");
+    assert_eq!(style.border_bottom_width, "3px");
+    assert_eq!(style.border_left_width, "3px");
+    assert_eq!(style.border_top_style, "solid");
+    assert_eq!(style.border_left_style, "solid");
 }
 
 #[test]

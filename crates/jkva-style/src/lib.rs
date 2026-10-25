@@ -95,7 +95,7 @@
 //! * Only the properties listed on [`ComputedStyle`] are tracked. `background`,
 //!   `font`, `border` and every other shorthand or property is ignored — so
 //!   `background: red` does **not** set `background-color`, and shorthand
-//!   expansion exists only for `margin` and `padding`.
+//!   expansion exists for `margin`, `padding`, `border-width`, `border-style` and `border`.
 //! * The user-agent sheet is deliberately small ([`ua::USER_AGENT_CSS`]): block
 //!   and inline element types, hidden metadata elements, the heading scale and
 //!   list indentation. `table` and `li` are `block` rather than `table` /

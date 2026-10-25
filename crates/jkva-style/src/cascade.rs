@@ -10,7 +10,8 @@
 //!    a more specific selector beats a less specific one, and `!important` beats
 //!    everything in the same origin. Only the author origin exists here, so there
 //!    is no origin ordering to apply.
-//! 3. `margin` and `padding` shorthands are expanded into their four longhands
+//! 3. `margin`, `padding`, `border-width`, `border-style` and `border` shorthands are
+//!    expanded into their longhands
 //!    before the winner is chosen, so `margin: 1px` and `margin-top: 2px` compete
 //!    per longhand.
 //! 4. Elements are visited in document order, so a parent's computed style is
@@ -36,7 +37,7 @@
 //! * `var()` is never substituted. A declaration such as `color: var(--brand)`
 //!   computes to the literal text `var(--brand)`, because custom properties are
 //!   parsed but not resolved.
-//! * Shorthands are expanded for `margin` and `padding` only. `background`,
+//! * Shorthands are expanded for `margin`, `padding` and the border shorthands. `background`,
 //!   `font`, `border` and friends are ignored entirely, so `background: red` does
 //!   **not** set `background-color`.
 //! * Declarations for properties outside the tracked set are dropped, including
@@ -535,6 +536,29 @@ fn collect_declaration<'a>(
             key,
             candidates,
         ),
+        "border-width" => expand_box(
+            &declaration.value,
+            [
+                PropertyId::BorderTopWidth,
+                PropertyId::BorderRightWidth,
+                PropertyId::BorderBottomWidth,
+                PropertyId::BorderLeftWidth,
+            ],
+            key,
+            candidates,
+        ),
+        "border-style" => expand_box(
+            &declaration.value,
+            [
+                PropertyId::BorderTopStyle,
+                PropertyId::BorderRightStyle,
+                PropertyId::BorderBottomStyle,
+                PropertyId::BorderLeftStyle,
+            ],
+            key,
+            candidates,
+        ),
+        "border" => expand_border(&declaration.value, key, candidates),
         _ => {}
     }
 }
@@ -555,6 +579,70 @@ fn expand_box<'a>(
             slot: property.index(),
             value,
         });
+    }
+}
+
+/// Expands the `border` shorthand into width and style longhands.
+///
+/// The colour component is accepted but ignored: this crate tracks no
+/// `border-color`, so paint uses the element's text colour (`currentColor`).
+/// Widths default to `medium`, styles to `none`, as the shorthand requires.
+fn expand_border<'a>(value: &'a str, key: OrderKey, candidates: &mut Vec<Candidate<'a>>) {
+    let mut width = "medium";
+    let mut style = "none";
+    for token in split_top_level(value) {
+        if BorderStyleKeyword::from_str(token).is_some() {
+            style = token;
+        } else if looks_like_length(token) {
+            width = token;
+        }
+    }
+    for property in [
+        PropertyId::BorderTopWidth,
+        PropertyId::BorderRightWidth,
+        PropertyId::BorderBottomWidth,
+        PropertyId::BorderLeftWidth,
+    ] {
+        candidates.push(Candidate {
+            key,
+            slot: property.index(),
+            value: width,
+        });
+    }
+    for property in [
+        PropertyId::BorderTopStyle,
+        PropertyId::BorderRightStyle,
+        PropertyId::BorderBottomStyle,
+        PropertyId::BorderLeftStyle,
+    ] {
+        candidates.push(Candidate {
+            key,
+            slot: property.index(),
+            value: style,
+        });
+    }
+}
+
+/// Returns `true` for tokens that can be a border width.
+fn looks_like_length(token: &str) -> bool {
+    let token = token.trim();
+    token == "0"
+        || matches!(token, "thin" | "medium" | "thick")
+        || ["px", "em", "rem", "pt"]
+            .iter()
+            .any(|unit| token.ends_with(unit))
+}
+
+/// Border style keywords accepted by the `border` shorthand.
+struct BorderStyleKeyword;
+
+impl BorderStyleKeyword {
+    fn from_str(value: &str) -> Option<()> {
+        match value {
+            "none" | "hidden" | "solid" | "dashed" | "dotted" | "double" | "groove" | "ridge"
+            | "inset" | "outset" => Some(()),
+            _ => None,
+        }
     }
 }
 
@@ -709,6 +797,14 @@ enum PropertyId {
     PaddingRight,
     PaddingBottom,
     PaddingLeft,
+    BorderTopWidth,
+    BorderRightWidth,
+    BorderBottomWidth,
+    BorderLeftWidth,
+    BorderTopStyle,
+    BorderRightStyle,
+    BorderBottomStyle,
+    BorderLeftStyle,
     FontSize,
     FontWeight,
     FontFamily,
@@ -716,7 +812,7 @@ enum PropertyId {
 
 impl PropertyId {
     /// Number of tracked properties.
-    const COUNT: usize = 16;
+    const COUNT: usize = 24;
 
     /// Every tracked property, ordered by [`PropertyId::index`].
     const ALL: [Self; Self::COUNT] = [
@@ -733,6 +829,14 @@ impl PropertyId {
         Self::PaddingRight,
         Self::PaddingBottom,
         Self::PaddingLeft,
+        Self::BorderTopWidth,
+        Self::BorderRightWidth,
+        Self::BorderBottomWidth,
+        Self::BorderLeftWidth,
+        Self::BorderTopStyle,
+        Self::BorderRightStyle,
+        Self::BorderBottomStyle,
+        Self::BorderLeftStyle,
         Self::FontSize,
         Self::FontWeight,
         Self::FontFamily,
@@ -754,9 +858,17 @@ impl PropertyId {
             Self::PaddingRight => 10,
             Self::PaddingBottom => 11,
             Self::PaddingLeft => 12,
-            Self::FontSize => 13,
-            Self::FontWeight => 14,
-            Self::FontFamily => 15,
+            Self::BorderTopWidth => 13,
+            Self::BorderRightWidth => 14,
+            Self::BorderBottomWidth => 15,
+            Self::BorderLeftWidth => 16,
+            Self::BorderTopStyle => 17,
+            Self::BorderRightStyle => 18,
+            Self::BorderBottomStyle => 19,
+            Self::BorderLeftStyle => 20,
+            Self::FontSize => 21,
+            Self::FontWeight => 22,
+            Self::FontFamily => 23,
         }
     }
 
@@ -778,6 +890,14 @@ impl PropertyId {
             "padding-right" => Self::PaddingRight,
             "padding-bottom" => Self::PaddingBottom,
             "padding-left" => Self::PaddingLeft,
+            "border-top-width" => Self::BorderTopWidth,
+            "border-right-width" => Self::BorderRightWidth,
+            "border-bottom-width" => Self::BorderBottomWidth,
+            "border-left-width" => Self::BorderLeftWidth,
+            "border-top-style" => Self::BorderTopStyle,
+            "border-right-style" => Self::BorderRightStyle,
+            "border-bottom-style" => Self::BorderBottomStyle,
+            "border-left-style" => Self::BorderLeftStyle,
             "font-size" => Self::FontSize,
             "font-weight" => Self::FontWeight,
             "font-family" => Self::FontFamily,
@@ -812,6 +932,14 @@ impl PropertyId {
             | Self::PaddingRight
             | Self::PaddingBottom
             | Self::PaddingLeft => "0",
+            Self::BorderTopWidth
+            | Self::BorderRightWidth
+            | Self::BorderBottomWidth
+            | Self::BorderLeftWidth => "0",
+            Self::BorderTopStyle
+            | Self::BorderRightStyle
+            | Self::BorderBottomStyle
+            | Self::BorderLeftStyle => "none",
             // `medium` computes to 16px under default font settings; this crate
             // does not absolutise lengths, so the two spellings differ once a
             // document declares `font-size: medium` explicitly.
@@ -851,6 +979,14 @@ impl PropertyId {
             Self::PaddingRight => &style.padding_right,
             Self::PaddingBottom => &style.padding_bottom,
             Self::PaddingLeft => &style.padding_left,
+            Self::BorderTopWidth => &style.border_top_width,
+            Self::BorderRightWidth => &style.border_right_width,
+            Self::BorderBottomWidth => &style.border_bottom_width,
+            Self::BorderLeftWidth => &style.border_left_width,
+            Self::BorderTopStyle => &style.border_top_style,
+            Self::BorderRightStyle => &style.border_right_style,
+            Self::BorderBottomStyle => &style.border_bottom_style,
+            Self::BorderLeftStyle => &style.border_left_style,
             Self::FontSize => &style.font_size,
             Self::FontWeight => &style.font_weight,
             Self::FontFamily => &style.font_family,
@@ -880,6 +1016,14 @@ impl PropertyId {
             Self::PaddingRight => style.padding_right = value.to_owned(),
             Self::PaddingBottom => style.padding_bottom = value.to_owned(),
             Self::PaddingLeft => style.padding_left = value.to_owned(),
+            Self::BorderTopWidth => style.border_top_width = value.to_owned(),
+            Self::BorderRightWidth => style.border_right_width = value.to_owned(),
+            Self::BorderBottomWidth => style.border_bottom_width = value.to_owned(),
+            Self::BorderLeftWidth => style.border_left_width = value.to_owned(),
+            Self::BorderTopStyle => style.border_top_style = value.to_owned(),
+            Self::BorderRightStyle => style.border_right_style = value.to_owned(),
+            Self::BorderBottomStyle => style.border_bottom_style = value.to_owned(),
+            Self::BorderLeftStyle => style.border_left_style = value.to_owned(),
             Self::FontSize => style.font_size = value.to_owned(),
             Self::FontWeight => style.font_weight = value.to_owned(),
             Self::FontFamily => style.font_family = value.to_owned(),
@@ -933,6 +1077,14 @@ mod tests {
             PropertyId::PaddingRight => "padding-right",
             PropertyId::PaddingBottom => "padding-bottom",
             PropertyId::PaddingLeft => "padding-left",
+            PropertyId::BorderTopWidth => "border-top-width",
+            PropertyId::BorderRightWidth => "border-right-width",
+            PropertyId::BorderBottomWidth => "border-bottom-width",
+            PropertyId::BorderLeftWidth => "border-left-width",
+            PropertyId::BorderTopStyle => "border-top-style",
+            PropertyId::BorderRightStyle => "border-right-style",
+            PropertyId::BorderBottomStyle => "border-bottom-style",
+            PropertyId::BorderLeftStyle => "border-left-style",
             PropertyId::FontSize => "font-size",
             PropertyId::FontWeight => "font-weight",
             PropertyId::FontFamily => "font-family",

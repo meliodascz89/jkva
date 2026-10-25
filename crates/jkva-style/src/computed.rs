@@ -208,6 +208,22 @@ pub struct ComputedStyle {
     pub padding_bottom: String,
     /// The `padding-left` property. Not inherited.
     pub padding_left: String,
+    /// The `border-top-width` property. Not inherited.
+    pub border_top_width: String,
+    /// The `border-right-width` property. Not inherited.
+    pub border_right_width: String,
+    /// The `border-bottom-width` property. Not inherited.
+    pub border_bottom_width: String,
+    /// The `border-left-width` property. Not inherited.
+    pub border_left_width: String,
+    /// The `border-top-style` property. Not inherited.
+    pub border_top_style: String,
+    /// The `border-right-style` property. Not inherited.
+    pub border_right_style: String,
+    /// The `border-bottom-style` property. Not inherited.
+    pub border_bottom_style: String,
+    /// The `border-left-style` property. Not inherited.
+    pub border_left_style: String,
     /// The `font-size` property. Inherited.
     pub font_size: String,
     /// The `font-weight` property. Inherited.
@@ -254,6 +270,14 @@ impl ComputedStyle {
             padding_right: "0".to_owned(),
             padding_bottom: "0".to_owned(),
             padding_left: "0".to_owned(),
+            border_top_width: "0".to_owned(),
+            border_right_width: "0".to_owned(),
+            border_bottom_width: "0".to_owned(),
+            border_left_width: "0".to_owned(),
+            border_top_style: "none".to_owned(),
+            border_right_style: "none".to_owned(),
+            border_bottom_style: "none".to_owned(),
+            border_left_style: "none".to_owned(),
             font_size: "16px".to_owned(),
             font_weight: "normal".to_owned(),
             font_family: String::new(),
