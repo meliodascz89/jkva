@@ -1084,6 +1084,10 @@ enum PropertyId {
     BorderRightColor,
     BorderBottomColor,
     BorderLeftColor,
+    FlexDirection,
+    JustifyContent,
+    AlignItems,
+    Gap,
     FontSize,
     FontWeight,
     FontFamily,
@@ -1091,7 +1095,7 @@ enum PropertyId {
 
 impl PropertyId {
     /// Number of tracked properties.
-    const COUNT: usize = 28;
+    const COUNT: usize = 32;
 
     /// Every tracked property, ordered by [`PropertyId::index`].
     const ALL: [Self; Self::COUNT] = [
@@ -1120,6 +1124,10 @@ impl PropertyId {
         Self::BorderRightColor,
         Self::BorderBottomColor,
         Self::BorderLeftColor,
+        Self::FlexDirection,
+        Self::JustifyContent,
+        Self::AlignItems,
+        Self::Gap,
         Self::FontSize,
         Self::FontWeight,
         Self::FontFamily,
@@ -1153,9 +1161,13 @@ impl PropertyId {
             Self::BorderRightColor => 22,
             Self::BorderBottomColor => 23,
             Self::BorderLeftColor => 24,
-            Self::FontSize => 25,
-            Self::FontWeight => 26,
-            Self::FontFamily => 27,
+            Self::FlexDirection => 25,
+            Self::JustifyContent => 26,
+            Self::AlignItems => 27,
+            Self::Gap => 28,
+            Self::FontSize => 29,
+            Self::FontWeight => 30,
+            Self::FontFamily => 31,
         }
     }
 
@@ -1189,6 +1201,10 @@ impl PropertyId {
             "border-right-color" => Self::BorderRightColor,
             "border-bottom-color" => Self::BorderBottomColor,
             "border-left-color" => Self::BorderLeftColor,
+            "flex-direction" => Self::FlexDirection,
+            "justify-content" => Self::JustifyContent,
+            "align-items" => Self::AlignItems,
+            "gap" => Self::Gap,
             "font-size" => Self::FontSize,
             "font-weight" => Self::FontWeight,
             "font-family" => Self::FontFamily,
@@ -1235,6 +1251,10 @@ impl PropertyId {
             | Self::BorderRightColor
             | Self::BorderBottomColor
             | Self::BorderLeftColor => "currentcolor",
+            Self::FlexDirection => "row",
+            Self::JustifyContent => "flex-start",
+            Self::AlignItems => "stretch",
+            Self::Gap => "0",
             // `medium` computes to 16px under default font settings; this crate
             // does not absolutise lengths, so the two spellings differ once a
             // document declares `font-size: medium` explicitly.
@@ -1286,6 +1306,10 @@ impl PropertyId {
             Self::BorderRightColor => &style.border_right_color,
             Self::BorderBottomColor => &style.border_bottom_color,
             Self::BorderLeftColor => &style.border_left_color,
+            Self::FlexDirection => &style.flex_direction,
+            Self::JustifyContent => &style.justify_content,
+            Self::AlignItems => &style.align_items,
+            Self::Gap => &style.gap,
             Self::FontSize => &style.font_size,
             Self::FontWeight => &style.font_weight,
             Self::FontFamily => &style.font_family,
@@ -1327,6 +1351,10 @@ impl PropertyId {
             Self::BorderRightColor => style.border_right_color = value.to_owned(),
             Self::BorderBottomColor => style.border_bottom_color = value.to_owned(),
             Self::BorderLeftColor => style.border_left_color = value.to_owned(),
+            Self::FlexDirection => style.flex_direction = value.to_owned(),
+            Self::JustifyContent => style.justify_content = value.to_owned(),
+            Self::AlignItems => style.align_items = value.to_owned(),
+            Self::Gap => style.gap = value.to_owned(),
             Self::FontSize => style.font_size = value.to_owned(),
             Self::FontWeight => style.font_weight = value.to_owned(),
             Self::FontFamily => style.font_family = value.to_owned(),
@@ -1392,6 +1420,10 @@ mod tests {
             PropertyId::BorderRightColor => "border-right-color",
             PropertyId::BorderBottomColor => "border-bottom-color",
             PropertyId::BorderLeftColor => "border-left-color",
+            PropertyId::FlexDirection => "flex-direction",
+            PropertyId::JustifyContent => "justify-content",
+            PropertyId::AlignItems => "align-items",
+            PropertyId::Gap => "gap",
             PropertyId::FontSize => "font-size",
             PropertyId::FontWeight => "font-weight",
             PropertyId::FontFamily => "font-family",

@@ -28,8 +28,8 @@ use jkva_dom::{Document, NodeId, NodeKind};
 use jkva_engine::parse_page;
 use jkva_gfx::{Image, Scene, SceneItem, TextureData, render_scene};
 use jkva_layout::{
-    Display, Edges, LayoutTree, Length, LengthEdges, StyleSource, TextMeasure,
-    Viewport as LayoutViewport, layout,
+    AlignItems, Display, Edges, FlexDirection, JustifyContent, LayoutTree, Length, LengthEdges,
+    StyleSource, TextMeasure, Viewport as LayoutViewport, layout,
 };
 use jkva_paint::{DamageRegion, Rect as PaintRect};
 use jkva_style::{ComputedStyle, ComputedStyleMap, StyleEngine, Stylesheet};
@@ -413,6 +413,39 @@ impl StyleSource for Styles<'_> {
         self.map
             .get(node)
             .and_then(|style| parse_color(&style.background_color))
+    }
+
+    fn flex_direction(&self, node: NodeId) -> FlexDirection {
+        match self.map.get(node).map(|s| s.flex_direction.as_str()) {
+            Some("column") => FlexDirection::Column,
+            _ => FlexDirection::Row,
+        }
+    }
+
+    fn justify_content(&self, node: NodeId) -> JustifyContent {
+        match self.map.get(node).map(|s| s.justify_content.as_str()) {
+            Some("flex-end") => JustifyContent::FlexEnd,
+            Some("center") => JustifyContent::Center,
+            Some("space-between") => JustifyContent::SpaceBetween,
+            Some("space-around") => JustifyContent::SpaceAround,
+            _ => JustifyContent::FlexStart,
+        }
+    }
+
+    fn align_items(&self, node: NodeId) -> AlignItems {
+        match self.map.get(node).map(|s| s.align_items.as_str()) {
+            Some("flex-start") => AlignItems::FlexStart,
+            Some("center") => AlignItems::Center,
+            Some("flex-end") => AlignItems::FlexEnd,
+            _ => AlignItems::Stretch,
+        }
+    }
+
+    fn gap(&self, node: NodeId) -> f32 {
+        self.map
+            .get(node)
+            .and_then(|s| parse_length(&s.gap, self.font_px(node)))
+            .unwrap_or(0.0)
     }
 
     fn font_weight(&self, node: NodeId) -> u16 {

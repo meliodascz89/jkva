@@ -232,6 +232,14 @@ pub struct ComputedStyle {
     pub border_bottom_color: String,
     /// The `border-left-color` property. Not inherited.
     pub border_left_color: String,
+    /// The `flex-direction` property. Not inherited.
+    pub flex_direction: String,
+    /// The `justify-content` property. Not inherited.
+    pub justify_content: String,
+    /// The `align-items` property. Not inherited.
+    pub align_items: String,
+    /// The `gap` property, used for both axes. Not inherited.
+    pub gap: String,
     /// The `font-size` property. Inherited.
     pub font_size: String,
     /// The `font-weight` property. Inherited.
@@ -289,6 +297,10 @@ impl ComputedStyle {
             border_right_color: String::new(),
             border_bottom_color: String::new(),
             border_left_color: String::new(),
+            flex_direction: String::new(),
+            justify_content: String::new(),
+            align_items: String::new(),
+            gap: String::new(),
             font_size: String::new(),
             font_weight: String::new(),
             font_family: String::new(),
@@ -335,6 +347,10 @@ impl ComputedStyle {
             border_right_color: "currentcolor".to_owned(),
             border_bottom_color: "currentcolor".to_owned(),
             border_left_color: "currentcolor".to_owned(),
+            flex_direction: "row".to_owned(),
+            justify_content: "flex-start".to_owned(),
+            align_items: "stretch".to_owned(),
+            gap: "0".to_owned(),
             font_size: "16px".to_owned(),
             font_weight: "normal".to_owned(),
             font_family: String::new(),

@@ -210,6 +210,46 @@ impl Edges {
     }
 }
 
+/// Main axis of a flex container.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FlexDirection {
+    /// Items are laid out left to right.
+    #[default]
+    Row,
+    /// Items are laid out top to bottom.
+    Column,
+}
+
+/// Distribution of free space along the main axis.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum JustifyContent {
+    /// Pack items at the start.
+    #[default]
+    FlexStart,
+    /// Pack items at the end.
+    FlexEnd,
+    /// Centre the items.
+    Center,
+    /// Equal space between items, none at the edges.
+    SpaceBetween,
+    /// Equal space around every item.
+    SpaceAround,
+}
+
+/// Alignment of items on the cross axis.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AlignItems {
+    /// Stretch items to the container's cross size.
+    #[default]
+    Stretch,
+    /// Align at the cross-start edge.
+    FlexStart,
+    /// Centre on the cross axis.
+    Center,
+    /// Align at the cross-end edge.
+    FlexEnd,
+}
+
 /// Replaces negative and non-finite values with `0.0`.
 ///
 /// `f32::max` returns the non-NaN operand, so `NaN.max(0.0)` is `0.0`; the explicit
@@ -284,6 +324,27 @@ pub trait StyleSource {
     /// Layout copies this into the text run and never interprets it; the colour is
     /// assumed to be sRGB, as in `jkva-paint`. Layout asks text nodes too.
     fn color(&self, node: NodeId) -> [u8; 4];
+
+    /// Returns the flex main axis for a container. Only read when the display is
+    /// [`Display::Flex`].
+    fn flex_direction(&self, _node: NodeId) -> FlexDirection {
+        FlexDirection::Row
+    }
+
+    /// Returns how free space is distributed along the flex main axis.
+    fn justify_content(&self, _node: NodeId) -> JustifyContent {
+        JustifyContent::FlexStart
+    }
+
+    /// Returns the cross-axis alignment of flex items.
+    fn align_items(&self, _node: NodeId) -> AlignItems {
+        AlignItems::Stretch
+    }
+
+    /// Returns the flex gap in CSS pixels, applied to both axes.
+    fn gap(&self, _node: NodeId) -> f32 {
+        0.0
+    }
 
     /// Returns the background colour of a box as straight RGBA, or `None` for
     /// `transparent`.

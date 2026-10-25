@@ -138,7 +138,9 @@ pub mod tree;
 
 pub use engine::layout;
 pub use geometry::{Point, Rect, Size};
-pub use style::{Display, Edges, Length, LengthEdges, StyleSource};
+pub use style::{
+    AlignItems, Display, Edges, FlexDirection, JustifyContent, Length, LengthEdges, StyleSource,
+};
 pub use text::{LINE_HEIGHT_FACTOR, TextMeasure, TextRun};
 pub use tree::{LayoutBox, LayoutTree, Viewport};
 

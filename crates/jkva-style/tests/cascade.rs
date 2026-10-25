@@ -89,6 +89,19 @@ fn every_tracked_property_computes_from_a_declaration() {
 }
 
 #[test]
+fn flex_properties_compute() {
+    let document = parse_html(r#"<div id="box">x</div>"#);
+    let engine = engine_of(
+        "div { flex-direction: column; justify-content: space-between; align-items: center; gap: 12px }",
+    );
+    let style = style_of(&document, &engine.compute_styles(&document), "box");
+    assert_eq!(style.flex_direction, "column");
+    assert_eq!(style.justify_content, "space-between");
+    assert_eq!(style.align_items, "center");
+    assert_eq!(style.gap, "12px");
+}
+
+#[test]
 fn border_shorthand_sets_width_and_style_on_every_side() {
     let document = parse_html(r#"<div id="box">x</div>"#);
     let engine = engine_of("div { border: 3px solid #00ff00 }");
