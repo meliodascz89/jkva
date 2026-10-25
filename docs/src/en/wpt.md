@@ -16,12 +16,12 @@ cd - && JKVA_SHOT=target/debug/jkva-shot \
   cargo run -p wpt-reftest-runner -- /tmp/wpt/css/css-color --limit 25
 ```
 
-## 2026-10-25 — first run, 25 reftests
+## 2026-10-25 — 25 reftests
 
 | Result | Count |
 |---|---|
-| pass | 10 |
-| fail | 7 |
+| pass | 11 |
+| fail | 6 |
 | unsupported | 7 |
 | error | 1 |
 
@@ -33,4 +33,4 @@ It is **not** a WPT score and not a conformance claim.
 - One error came from a reference outside the sparse checkout (`/css/reference/...`), not from rendering.
 - The official `wpt run` harness, with its product adapter and WebDriver, arrives with the JS engine in M4.
 
-The honest reading: the binary works, the corpus runner works, and the number is a floor with a known upward bias. It will be replaced by the official harness, not polished.
+The honest reading: the binary works, the corpus runner works, and the number is a floor with a known upward bias. It will be replaced by the official harness, not polished. The second run, after hsl/rgb/named-colour parsing, moved from 10 to 11 passes; the remaining failures lean on `color()` spaces the engine does not implement.

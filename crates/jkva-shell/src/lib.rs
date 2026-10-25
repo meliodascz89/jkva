@@ -288,6 +288,20 @@ impl<'a> Styles<'a> {
     }
 
     /// Font family for paint, with the UA default when the cascade says nothing.
+    /// Resolves one border side's colour, falling back to `currentColor`.
+    fn border_color(&self, node: NodeId, pick: impl Fn(&ComputedStyle) -> &str) -> [u8; 4] {
+        let inherited = self.inherited_color(node);
+        let Some(style) = self.map.get(node) else {
+            return inherited;
+        };
+        let value = pick(style);
+        if value.trim().eq_ignore_ascii_case("currentcolor") {
+            inherited
+        } else {
+            parse_color(value).unwrap_or(inherited)
+        }
+    }
+
     fn family_of(&self, node: NodeId) -> String {
         let family = self
             .inherited_style(node)
@@ -465,8 +479,11 @@ fn build_scene(tree: &LayoutTree, styles: &Styles<'_>, fonts: &mut FontCache) ->
                 b.rect.size.w,
                 b.rect.size.h,
             );
-            let color = styles.inherited_color(b.node);
-            let mut push = |x: f32, y: f32, w: f32, h: f32| {
+            let top_color = styles.border_color(b.node, |s| &s.border_top_color);
+            let right_color = styles.border_color(b.node, |s| &s.border_right_color);
+            let bottom_color = styles.border_color(b.node, |s| &s.border_bottom_color);
+            let left_color = styles.border_color(b.node, |s| &s.border_left_color);
+            let mut push = |x: f32, y: f32, w: f32, h: f32, color: [u8; 4]| {
                 if w > 0.0 && h > 0.0 {
                     scene.push(SceneItem::Rect {
                         rect: PaintRect::new(x, y, w, h),
@@ -474,10 +491,10 @@ fn build_scene(tree: &LayoutTree, styles: &Styles<'_>, fonts: &mut FontCache) ->
                     });
                 }
             };
-            push(x, y, w, border.top);
-            push(x, y + h - border.bottom, w, border.bottom);
-            push(x, y, border.left, h);
-            push(x + w - border.right, y, border.right, h);
+            push(x, y, w, border.top, top_color);
+            push(x, y + h - border.bottom, w, border.bottom, bottom_color);
+            push(x, y, border.left, h, left_color);
+            push(x + w - border.right, y, border.right, h, right_color);
         }
     }
 
@@ -556,6 +573,23 @@ mod tests {
         <div id="a" class="box">A</div>
         <div id="b">B</div>
     "#;
+
+    #[test]
+    fn a_border_colour_is_painted() {
+        let frame = Frame::new(
+            "<style>#b { border: 2px solid #00ff00; width: 50px; height: 20px }</style><div id=\"b\"></div>",
+            200,
+            100,
+        )
+        .unwrap();
+        let node = frame.element_by_id("b").unwrap();
+        let rect = frame.layout.box_for(node).unwrap().rect;
+        let image = frame.render().unwrap();
+        let x = rect.origin.x as u32 + 1;
+        let y = rect.origin.y as u32 + 1;
+        let offset = ((y * image.width + x) * 4) as usize;
+        assert_eq!(&image.rgba[offset..offset + 4], &[0, 255, 0, 255]);
+    }
 
     #[test]
     fn an_inline_background_is_painted_behind_its_text() {

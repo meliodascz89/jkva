@@ -224,6 +224,14 @@ pub struct ComputedStyle {
     pub border_bottom_style: String,
     /// The `border-left-style` property. Not inherited.
     pub border_left_style: String,
+    /// The `border-top-color` property. Not inherited; `currentcolor` by default.
+    pub border_top_color: String,
+    /// The `border-right-color` property. Not inherited.
+    pub border_right_color: String,
+    /// The `border-bottom-color` property. Not inherited.
+    pub border_bottom_color: String,
+    /// The `border-left-color` property. Not inherited.
+    pub border_left_color: String,
     /// The `font-size` property. Inherited.
     pub font_size: String,
     /// The `font-weight` property. Inherited.
@@ -277,6 +285,10 @@ impl ComputedStyle {
             border_right_style: String::new(),
             border_bottom_style: String::new(),
             border_left_style: String::new(),
+            border_top_color: String::new(),
+            border_right_color: String::new(),
+            border_bottom_color: String::new(),
+            border_left_color: String::new(),
             font_size: String::new(),
             font_weight: String::new(),
             font_family: String::new(),
@@ -319,6 +331,10 @@ impl ComputedStyle {
             border_right_style: "none".to_owned(),
             border_bottom_style: "none".to_owned(),
             border_left_style: "none".to_owned(),
+            border_top_color: "currentcolor".to_owned(),
+            border_right_color: "currentcolor".to_owned(),
+            border_bottom_color: "currentcolor".to_owned(),
+            border_left_color: "currentcolor".to_owned(),
             font_size: "16px".to_owned(),
             font_weight: "normal".to_owned(),
             font_family: String::new(),

@@ -794,6 +794,17 @@ fn collect_declaration<'a>(
             key,
             candidates,
         ),
+        "border-color" => expand_box(
+            &declaration.value,
+            [
+                PropertyId::BorderTopColor,
+                PropertyId::BorderRightColor,
+                PropertyId::BorderBottomColor,
+                PropertyId::BorderLeftColor,
+            ],
+            key,
+            candidates,
+        ),
         "border" => expand_border(&declaration.value, key, candidates),
         _ => {}
     }
@@ -826,11 +837,14 @@ fn expand_box<'a>(
 fn expand_border<'a>(value: &'a str, key: OrderKey, candidates: &mut Vec<Candidate<'a>>) {
     let mut width = "medium";
     let mut style = "none";
+    let mut color = "currentcolor";
     for token in split_top_level(value) {
         if BorderStyleKeyword::from_str(token).is_some() {
             style = token;
         } else if looks_like_length(token) {
             width = token;
+        } else {
+            color = token;
         }
     }
     for property in [
@@ -855,6 +869,18 @@ fn expand_border<'a>(value: &'a str, key: OrderKey, candidates: &mut Vec<Candida
             key,
             slot: property.index(),
             value: style,
+        });
+    }
+    for property in [
+        PropertyId::BorderTopColor,
+        PropertyId::BorderRightColor,
+        PropertyId::BorderBottomColor,
+        PropertyId::BorderLeftColor,
+    ] {
+        candidates.push(Candidate {
+            key,
+            slot: property.index(),
+            value: color,
         });
     }
 }
@@ -1054,6 +1080,10 @@ enum PropertyId {
     BorderRightStyle,
     BorderBottomStyle,
     BorderLeftStyle,
+    BorderTopColor,
+    BorderRightColor,
+    BorderBottomColor,
+    BorderLeftColor,
     FontSize,
     FontWeight,
     FontFamily,
@@ -1061,7 +1091,7 @@ enum PropertyId {
 
 impl PropertyId {
     /// Number of tracked properties.
-    const COUNT: usize = 24;
+    const COUNT: usize = 28;
 
     /// Every tracked property, ordered by [`PropertyId::index`].
     const ALL: [Self; Self::COUNT] = [
@@ -1086,6 +1116,10 @@ impl PropertyId {
         Self::BorderRightStyle,
         Self::BorderBottomStyle,
         Self::BorderLeftStyle,
+        Self::BorderTopColor,
+        Self::BorderRightColor,
+        Self::BorderBottomColor,
+        Self::BorderLeftColor,
         Self::FontSize,
         Self::FontWeight,
         Self::FontFamily,
@@ -1115,9 +1149,13 @@ impl PropertyId {
             Self::BorderRightStyle => 18,
             Self::BorderBottomStyle => 19,
             Self::BorderLeftStyle => 20,
-            Self::FontSize => 21,
-            Self::FontWeight => 22,
-            Self::FontFamily => 23,
+            Self::BorderTopColor => 21,
+            Self::BorderRightColor => 22,
+            Self::BorderBottomColor => 23,
+            Self::BorderLeftColor => 24,
+            Self::FontSize => 25,
+            Self::FontWeight => 26,
+            Self::FontFamily => 27,
         }
     }
 
@@ -1147,6 +1185,10 @@ impl PropertyId {
             "border-right-style" => Self::BorderRightStyle,
             "border-bottom-style" => Self::BorderBottomStyle,
             "border-left-style" => Self::BorderLeftStyle,
+            "border-top-color" => Self::BorderTopColor,
+            "border-right-color" => Self::BorderRightColor,
+            "border-bottom-color" => Self::BorderBottomColor,
+            "border-left-color" => Self::BorderLeftColor,
             "font-size" => Self::FontSize,
             "font-weight" => Self::FontWeight,
             "font-family" => Self::FontFamily,
@@ -1189,6 +1231,10 @@ impl PropertyId {
             | Self::BorderRightStyle
             | Self::BorderBottomStyle
             | Self::BorderLeftStyle => "none",
+            Self::BorderTopColor
+            | Self::BorderRightColor
+            | Self::BorderBottomColor
+            | Self::BorderLeftColor => "currentcolor",
             // `medium` computes to 16px under default font settings; this crate
             // does not absolutise lengths, so the two spellings differ once a
             // document declares `font-size: medium` explicitly.
@@ -1236,6 +1282,10 @@ impl PropertyId {
             Self::BorderRightStyle => &style.border_right_style,
             Self::BorderBottomStyle => &style.border_bottom_style,
             Self::BorderLeftStyle => &style.border_left_style,
+            Self::BorderTopColor => &style.border_top_color,
+            Self::BorderRightColor => &style.border_right_color,
+            Self::BorderBottomColor => &style.border_bottom_color,
+            Self::BorderLeftColor => &style.border_left_color,
             Self::FontSize => &style.font_size,
             Self::FontWeight => &style.font_weight,
             Self::FontFamily => &style.font_family,
@@ -1273,6 +1323,10 @@ impl PropertyId {
             Self::BorderRightStyle => style.border_right_style = value.to_owned(),
             Self::BorderBottomStyle => style.border_bottom_style = value.to_owned(),
             Self::BorderLeftStyle => style.border_left_style = value.to_owned(),
+            Self::BorderTopColor => style.border_top_color = value.to_owned(),
+            Self::BorderRightColor => style.border_right_color = value.to_owned(),
+            Self::BorderBottomColor => style.border_bottom_color = value.to_owned(),
+            Self::BorderLeftColor => style.border_left_color = value.to_owned(),
             Self::FontSize => style.font_size = value.to_owned(),
             Self::FontWeight => style.font_weight = value.to_owned(),
             Self::FontFamily => style.font_family = value.to_owned(),
@@ -1334,6 +1388,10 @@ mod tests {
             PropertyId::BorderRightStyle => "border-right-style",
             PropertyId::BorderBottomStyle => "border-bottom-style",
             PropertyId::BorderLeftStyle => "border-left-style",
+            PropertyId::BorderTopColor => "border-top-color",
+            PropertyId::BorderRightColor => "border-right-color",
+            PropertyId::BorderBottomColor => "border-bottom-color",
+            PropertyId::BorderLeftColor => "border-left-color",
             PropertyId::FontSize => "font-size",
             PropertyId::FontWeight => "font-weight",
             PropertyId::FontFamily => "font-family",

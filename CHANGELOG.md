@@ -24,6 +24,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - `jkva-layout`: `Length { Auto, Px, Percent }` for widths and heights; percentages resolve against the containing block width.
 - `jkva-layout`: text fragments carry font weight and family, measured through `TextMeasure::measure_styled`; collapsible spaces are their own fragments so measurement and painting share one face.
 - `jkva-layout`: block and inline layout with auto/explicit widths, margins, padding, sibling margin collapse, whitespace collapsing and greedy line breaking.
+- `jkva-style`: `border-*-color` and the `border-color` shorthand; the `border` shorthand sets the colour too.
 - `jkva-style`: `border-*-width` and `border-*-style`, with `border-width`, `border-style` and `border` shorthand expansion (border colour is still `currentColor`).
 - `jkva-style`: CSS parser, structural selector model, L4 specificity, selector matching and the cascade into `ComputedStyle` (at-rule contents, `var()` and a UA stylesheet are not implemented yet).
 - `jkva-text`: font discovery (fontdb), HarfBuzz shaping (harfrust) and glyph rasterization to alpha coverage (swash), with a documented fallback chain.

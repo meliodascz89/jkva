@@ -33,7 +33,6 @@ What is done, what is verified, and what is deliberately not done yet. Every lin
 
 These are not hidden; they are the M2+ work.
 
-- **Borders paint in `currentColor` only**; `border-color` is not a tracked property.
 - **The official `wpt run` harness** needs a JS engine and WebDriver and arrives with M4. The reftest runner is the M1 substitute, with its caveats published.
 - **Layout is a full-document pass.** Only damage is incremental today.
 - **Cascade cost** is 1.94 ms on the 602-node fixture and documented in [Performance baseline](performance.md).

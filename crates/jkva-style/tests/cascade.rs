@@ -91,7 +91,7 @@ fn every_tracked_property_computes_from_a_declaration() {
 #[test]
 fn border_shorthand_sets_width_and_style_on_every_side() {
     let document = parse_html(r#"<div id="box">x</div>"#);
-    let engine = engine_of("div { border: 3px solid }");
+    let engine = engine_of("div { border: 3px solid #00ff00 }");
     let style = style_of(&document, &engine.compute_styles(&document), "box");
     assert_eq!(style.border_top_width, "3px");
     assert_eq!(style.border_right_width, "3px");
@@ -99,6 +99,8 @@ fn border_shorthand_sets_width_and_style_on_every_side() {
     assert_eq!(style.border_left_width, "3px");
     assert_eq!(style.border_top_style, "solid");
     assert_eq!(style.border_left_style, "solid");
+    assert_eq!(style.border_top_color, "#00ff00");
+    assert_eq!(style.border_left_color, "#00ff00");
 }
 
 #[test]

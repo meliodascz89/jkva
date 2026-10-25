@@ -16,12 +16,12 @@ cd - && JKVA_SHOT=target/debug/jkva-shot \
   cargo run -p wpt-reftest-runner -- /tmp/wpt/css/css-color --limit 25
 ```
 
-## 2026-10-25 — první běh, 25 reftestů
+## 2026-10-25 — 25 reftestů
 
 | Výsledek | Počet |
 |---|---|
-| pass | 10 |
-| fail | 7 |
+| pass | 11 |
+| fail | 6 |
 | unsupported | 7 |
 | error | 1 |
 
@@ -33,4 +33,4 @@ Není to WPT skóre ani tvrzení o conformance.
 - Jeden error vznikl kvůli referenci mimo sparse checkout (`/css/reference/...`), ne vykreslením.
 - Oficiální harness `wpt run` s produktovým adaptérem a WebDriverem přijde s JS enginem v M4.
 
-Poctivé čtení: binárka funguje, corpus runner funguje a číslo je spodní odhad se známým zkreslením nahoru. Nahradí ho oficiální harness, ne další leštění.
+Poctivé čtení: binárka funguje, corpus runner funguje a číslo je spodní odhad se známým zkreslením nahoru. Nahradí ho oficiální harness, ne další leštění. Druhý běh po doplnění hsl/rgb/named barev posunul 10 na 11 pass; zbylé chyby stojí na barevných prostorech `color()`, které engine neumí.
