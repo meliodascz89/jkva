@@ -43,6 +43,19 @@
 //! * There is no style sharing and no incremental restyle: every
 //!   [`StyleEngine::compute_styles`] pass recomputes every element.
 //!
+//! # What one element costs
+//!
+//! Per element the pass does one lookup per bucket the element belongs to, one
+//! full match test per bucketed selector, one sort of that element's candidates,
+//! and exactly one write per tracked property. The candidate buffer is owned by
+//! [`StyleEngine::compute_styles`] and reused across elements, so the only
+//! per-element heap traffic left is the style itself: the 23 owned `String`
+//! fields of [`ComputedStyle`], allocated once each.
+//!
+//! That is the floor while the fields own their text as `String`. Going lower
+//! needs a shared or interned representation (`Arc<str>`), which would change
+//! `ComputedStyle`'s public field types.
+//!
 //! # The rule index
 //!
 //! Every selector is filed under the most selective simple selector of its
@@ -507,12 +520,16 @@ impl StyleEngine {
     #[must_use]
     pub fn compute_styles(&self, document: &Document) -> ComputedStyleMap {
         let mut styles = ComputedStyleMap::new();
+        // One candidate buffer for the whole pass: the candidates borrow the
+        // stylesheets, not the element, so the buffer survives from element to
+        // element and its capacity is reused.
+        let mut candidates: Vec<Candidate<'_>> = Vec::new();
         for node in document.descendants(document.root()) {
             let Some(element) = document.element(node) else {
                 continue;
             };
             let parent_style = document.parent(node).and_then(|parent| styles.get(parent));
-            let computed = self.compute_one(document, node, element, parent_style);
+            let computed = self.compute_one(document, node, element, parent_style, &mut candidates);
             styles.insert(node, computed);
         }
         styles
@@ -529,29 +546,36 @@ impl StyleEngine {
     }
 
     /// Computes the style of one element, given the style of its parent.
-    fn compute_one(
-        &self,
+    ///
+    /// `candidates` is a caller-owned scratch buffer; reusing it across elements
+    /// keeps the per-element pass allocation-free apart from the style itself.
+    fn compute_one<'a>(
+        &'a self,
         document: &Document,
         node: NodeId,
         element: &ElementData,
         parent: Option<&ComputedStyle>,
+        candidates: &mut Vec<Candidate<'a>>,
     ) -> ComputedStyle {
-        let mut candidates: Vec<Candidate<'_>> = Vec::new();
-        self.collect_candidates(document, node, element, &mut candidates);
+        candidates.clear();
+        self.collect_candidates(document, node, element, candidates);
 
         // Ascending sort, then apply in order: the last writer wins. Bucket order
         // never leaks into the result, because the key carries specificity and
         // source order.
         candidates.sort_by_key(|candidate| candidate.key);
         let mut declared: [Option<&str>; PropertyId::COUNT] = [None; PropertyId::COUNT];
-        for candidate in candidates {
+        for candidate in candidates.iter() {
             declared[candidate.slot] = Some(candidate.value);
         }
 
-        let mut style = ComputedStyle::initial();
+        // Every slot is written exactly once, so starting from an empty style is
+        // equivalent to starting from `ComputedStyle::initial()` — the unit test
+        // `filling_every_property_from_initial_reproduces_the_initial_style`
+        // proves the property table really does cover every field.
+        let mut style = ComputedStyle::empty();
         for property in PropertyId::ALL {
-            let value = resolve_value(property, declared[property.index()], parent);
-            property.assign(&mut style, &value);
+            assign_resolved(property, declared[property.index()], parent, &mut style);
         }
         style
     }
@@ -957,40 +981,53 @@ impl WideKeyword {
     }
 }
 
-/// Resolves the winning declared value of one property to its computed text.
-fn resolve_value(
+/// Reads the value a property inherits, falling back to its initial value.
+///
+/// Borrows rather than allocating: the caller copies it into the style exactly
+/// once.
+fn inherited_value(property: PropertyId, parent: Option<&ComputedStyle>) -> &str {
+    match parent {
+        Some(parent) => property.value_of(parent),
+        None => property.initial(),
+    }
+}
+
+/// Resolves one property and writes it into `style`, allocating only the field's
+/// own `String`.
+///
+/// This replaces an earlier `resolve_value() -> String` plus `assign(&str)` pair
+/// that allocated twice per property: the candidate value is now borrowed — from
+/// the declaration, from the parent's style or from the initial-value table — and
+/// copied once.
+fn assign_resolved(
     property: PropertyId,
     declared: Option<&str>,
     parent: Option<&ComputedStyle>,
-) -> String {
-    fn inherited(property: PropertyId, parent: Option<&ComputedStyle>) -> String {
-        match parent {
-            Some(parent) => property.value_of(parent).to_owned(),
-            None => property.initial().to_owned(),
-        }
-    }
-
-    match declared {
+    style: &mut ComputedStyle,
+) {
+    let source = match declared {
         Some(value) => match WideKeyword::from_value(value) {
-            Some(WideKeyword::Inherit) => inherited(property, parent),
-            Some(WideKeyword::Initial) => property.initial().to_owned(),
+            Some(WideKeyword::Inherit) => inherited_value(property, parent),
+            Some(WideKeyword::Initial) => property.initial(),
             Some(WideKeyword::Unset | WideKeyword::Revert | WideKeyword::RevertLayer) => {
                 if property.is_inherited() {
-                    inherited(property, parent)
+                    inherited_value(property, parent)
                 } else {
-                    property.initial().to_owned()
+                    property.initial()
                 }
             }
-            None => value.to_owned(),
+            // The common case: the declared text *is* the computed text.
+            None => value,
         },
         None => {
             if property.is_inherited() {
-                inherited(property, parent)
+                inherited_value(property, parent)
             } else {
-                property.initial().to_owned()
+                property.initial()
             }
         }
-    }
+    };
+    property.assign(style, source);
 }
 
 /// The longhand properties this crate computes.
@@ -1350,6 +1387,20 @@ mod tests {
         );
         assert_eq!(WideKeyword::from_value("red"), None);
         assert_eq!(WideKeyword::from_value("var(--x)"), None);
+    }
+
+    #[test]
+    fn filling_every_property_from_initial_reproduces_the_initial_style() {
+        // The per-element hot path starts from `ComputedStyle::empty()` and then
+        // writes every slot exactly once, so it is only correct while the
+        // property table covers *every* field of `ComputedStyle`. A field added
+        // without a matching `PropertyId` leaves an empty string behind and makes
+        // this comparison fail.
+        let mut style = ComputedStyle::empty();
+        for property in PropertyId::ALL {
+            property.assign(&mut style, property.initial());
+        }
+        assert_eq!(style, ComputedStyle::initial());
     }
 
     #[test]

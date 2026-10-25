@@ -631,3 +631,43 @@ fn a_reused_arena_slot_never_leaks_another_nodes_style() {
     // node that existed then. Recompute to observe a removal.
     assert_eq!(before.get(old_node).unwrap().color, "red");
 }
+
+#[test]
+fn an_element_with_no_matching_rules_gets_the_initial_values() {
+    // The fast path starts from an allocation-free "empty" style and fills every
+    // slot, so an element nothing matches must still come out fully initialised.
+    let document = parse_html("<div id=d></div>");
+    let mut engine = StyleEngine::without_user_agent();
+    engine.add_stylesheet(Stylesheet::parse("p { color: red }").unwrap());
+
+    let styles = engine.compute_styles(&document);
+    assert_eq!(style_of(&document, &styles, "d"), ComputedStyle::initial());
+}
+
+#[test]
+fn properties_without_a_declaration_keep_their_initial_values() {
+    // The counterpart of the test above: an element that *does* get declarations
+    // must still initialise the properties it never mentions. An empty string
+    // here would mean the fast path leaked its scratch style.
+    let document = parse_html("<div id=d></div>");
+    let engine = engine_of("#d { color: red; margin-top: 3px }");
+    let style = style_of(&document, &engine.compute_styles(&document), "d");
+
+    assert_eq!(style.color, "red");
+    assert_eq!(style.margin_top, "3px");
+
+    assert_eq!(style.margin_right, "0");
+    assert_eq!(style.padding_top, "0");
+    assert_eq!(style.border_top_style, "none");
+    assert_eq!(style.border_left_width, "0");
+    assert_eq!(style.width, "auto");
+    assert_eq!(style.height, "auto");
+    assert_eq!(style.background_color, "transparent");
+    assert_eq!(style.font_size, "16px");
+    assert_eq!(style.font_weight, "normal");
+    // `font-family` starts as the empty string, meaning "UA default"; the other
+    // fields must not be empty.
+    assert_eq!(style.font_family, "");
+    assert_ne!(style.margin_right, "");
+    assert_ne!(style.border_top_style, "");
+}

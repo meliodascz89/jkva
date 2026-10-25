@@ -242,6 +242,47 @@ impl Default for ComputedStyle {
 }
 
 impl ComputedStyle {
+    /// A style with every string field empty and no allocations.
+    ///
+    /// Only the cascade uses this: [`crate::cascade::StyleEngine`] fills all
+    /// [`PropertyId`](crate::cascade) slots immediately afterwards, so an empty
+    /// style never escapes the crate. `empty()` exists so that the per-element
+    /// hot path pays for each field exactly once instead of building
+    /// [`ComputedStyle::initial`] and overwriting it.
+    ///
+    /// A field added to this struct must be added here *and* to the cascade's
+    /// property table; the unit test
+    /// `filling_every_property_from_initial_reproduces_the_initial_style`
+    /// fails if the two drift apart.
+    pub(crate) fn empty() -> Self {
+        Self {
+            display: DisplayType::Inline,
+            color: String::new(),
+            background_color: String::new(),
+            width: String::new(),
+            height: String::new(),
+            margin_top: String::new(),
+            margin_right: String::new(),
+            margin_bottom: String::new(),
+            margin_left: String::new(),
+            padding_top: String::new(),
+            padding_right: String::new(),
+            padding_bottom: String::new(),
+            padding_left: String::new(),
+            border_top_width: String::new(),
+            border_right_width: String::new(),
+            border_bottom_width: String::new(),
+            border_left_width: String::new(),
+            border_top_style: String::new(),
+            border_right_style: String::new(),
+            border_bottom_style: String::new(),
+            border_left_style: String::new(),
+            font_size: String::new(),
+            font_weight: String::new(),
+            font_family: String::new(),
+        }
+    }
+
     /// The initial value of every tracked property.
     ///
     /// These are the CSS initial values, with three documented approximations:
