@@ -60,4 +60,4 @@ A donation is not a purchase: it does not buy features, priority or a say in the
 
 ## License
 
-MIT OR Apache-2.0, at your option. See [`LICENSE-MIT`](LICENSE-MIT) and [`LICENSE-APACHE`](LICENSE-APACHE).
+MIT See [`LICENSE-MIT`](LICENSE-MIT)
