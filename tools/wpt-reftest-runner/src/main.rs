@@ -48,7 +48,10 @@ fn parse() -> Args {
             }
             "--filter" => args.filter = it.next(),
             "--threshold" => {
-                args.threshold = it.next().and_then(|v| v.parse().ok()).unwrap_or_else(|| usage());
+                args.threshold = it
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or_else(|| usage());
             }
             "--json" => args.json = true,
             _ => usage(),
@@ -102,7 +105,10 @@ fn main() -> ExitCode {
         cases.truncate(limit);
     }
     if cases.is_empty() {
-        eprintln!("wpt-reftest-runner: no reftests found in {}", args.root.display());
+        eprintln!(
+            "wpt-reftest-runner: no reftests found in {}",
+            args.root.display()
+        );
         return ExitCode::from(2);
     }
 
@@ -119,11 +125,7 @@ fn main() -> ExitCode {
         if !case.unsupported.is_empty() {
             unsupported += 1;
             if !args.json {
-                println!(
-                    "skip  {} ({})",
-                    case.name,
-                    case.unsupported.join(", ")
-                );
+                println!("skip  {} ({})", case.name, case.unsupported.join(", "));
             }
             continue;
         }

@@ -56,7 +56,8 @@ pub fn discover(root: &Path) -> Result<Vec<Case>, String> {
 }
 
 fn collect_html(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
-    let entries = std::fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
+    let entries =
+        std::fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
     for entry in entries {
         let entry = entry.map_err(|e| format!("cannot read an entry: {e}"))?;
         let path = entry.path();
@@ -193,7 +194,12 @@ mod tests {
         std::fs::write(dir.join("ref.html"), "<p>ref</p>").unwrap();
         let cases = discover(&dir).unwrap();
         assert_eq!(cases.len(), 1);
-        assert!(cases[0].unsupported.iter().any(|r| r == "external stylesheet"));
+        assert!(
+            cases[0]
+                .unsupported
+                .iter()
+                .any(|r| r == "external stylesheet")
+        );
         assert!(cases[0].unsupported.iter().any(|r| r == "script"));
         std::fs::remove_dir_all(&dir).unwrap();
     }
