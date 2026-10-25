@@ -1,0 +1,17 @@
+[package]
+name = "wpt-reftest-runner"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+description = "Run Web Platform Tests reftests against jkva-shot"
+
+[lints]
+workspace = true
+
+[dependencies]
+jkva-dom = { path = "../../crates/jkva-dom" }
+reftest-diff = { path = "../reftest-diff" }

@@ -142,3 +142,17 @@ cargo run -p bench-runner -- --json
 
 Every report names the fixture size and the iteration count. These are not
 Speedometer numbers; they exist so a regression is visible in seconds.
+
+## wpt-reftest-runner
+
+Finds WPT reftests (`<link rel="match">` / `mismatch`), renders both sides with
+`jkva-shot` and compares them exactly.
+
+```bash
+JKVA_SHOT=target/debug/jkva-shot \
+  cargo run -p wpt-reftest-runner -- /path/to/wpt/css/css-color --limit 25
+```
+
+Pages with external stylesheets, scripts, images, iframes, media, `@import` or
+`url()` are reported as **unsupported**, never as passing. `--json` prints the
+counts. See [Web Platform Tests](../wpt.md) for the first run and its caveats.

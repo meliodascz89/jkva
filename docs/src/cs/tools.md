@@ -141,3 +141,17 @@ cargo run -p bench-runner -- --json
 
 Každý report uvádí velikost fixture a počet iterací. Nejsou to čísla ze
 Speedometru; slouží k tomu, aby byl regres vidět během sekund.
+
+## wpt-reftest-runner
+
+Najde WPT reftesty (`<link rel="match">` / `mismatch`), vykreslí obě strany přes
+`jkva-shot` a přesně je porovná.
+
+```bash
+JKVA_SHOT=target/debug/jkva-shot \
+  cargo run -p wpt-reftest-runner -- /cesta/k/wpt/css/css-color --limit 25
+```
+
+Stránky s externím stylesheetem, skriptem, obrázkem, iframe, médii, `@import`
+nebo `url()` se hlásí jako **unsupported**, nikdy jako pass. `--json` vypíše
+počty. První běh a jeho limity jsou v [Web Platform Tests](../wpt.md).

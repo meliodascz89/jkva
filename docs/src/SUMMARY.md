@@ -6,6 +6,7 @@
 - [Architecture](en/architecture.md)
 - [Building](en/building.md)
 - [Performance baseline](en/performance.md)
+- [Web Platform Tests](en/wpt.md)
 - [Tools](en/tools.md)
 - [Contributing](en/contributing.md)
 
@@ -15,5 +16,6 @@
 - [Architektura](cs/architecture.md)
 - [Sestavení](cs/building.md)
 - [Výkonnostní baseline](cs/performance.md)
+- [Web Platform Tests](cs/wpt.md)
 - [Nástroje](cs/tools.md)
 - [Přispívání](cs/contributing.md)
