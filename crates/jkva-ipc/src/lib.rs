@@ -31,7 +31,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Version of the IPC protocol.
-pub const PROTOCOL_VERSION: u16 = 1;
+pub const PROTOCOL_VERSION: u16 = 2;
 
 /// Largest payload a frame may carry, in bytes.
 pub const MAX_FRAME_BYTES: u32 = 16 * 1024 * 1024;
@@ -78,6 +78,15 @@ pub enum InputEvent {
     Wheel {
         /// Vertical delta, positive scrolls down.
         dy: f32,
+    },
+    /// A gamepad state update, sent at the polling rate the game asks for.
+    Gamepad {
+        /// Zero-based gamepad index.
+        pad: u8,
+        /// Bitmask of pressed buttons, in the standard gamepad layout.
+        buttons: u32,
+        /// Axes in `[-1.0, 1.0]`: left X/Y, right X/Y, then triggers.
+        axes: Vec<f32>,
     },
     /// A key was pressed; `text` is empty for non-printing keys.
     Key {
@@ -299,6 +308,14 @@ mod tests {
             Message::Browser(BrowserToRenderer::Navigate {
                 frame: FrameId(1),
                 url: "about:blank".into(),
+            }),
+            Message::Browser(BrowserToRenderer::Input {
+                frame: FrameId(1),
+                event: InputEvent::Gamepad {
+                    pad: 0,
+                    buttons: 0x0001,
+                    axes: vec![0.5, -0.5, 0.0, 0.0],
+                },
             }),
             Message::Browser(BrowserToRenderer::Input {
                 frame: FrameId(1),

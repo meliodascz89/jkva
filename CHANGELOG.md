@@ -31,6 +31,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - `jkva-text`: font discovery (fontdb), HarfBuzz shaping (harfrust) and glyph rasterization to alpha coverage (swash), with a documented fallback chain.
 - `jkva-core`: fixed-timestep `FrameClock` with capped simulation steps, interpolation alpha, dropped-frame reporting and runtime rate changes (ADR-026).
 - `jkva-net`: permission-gated UDP transport (Tokio), default deny, per-origin and per-application grants, revoke, datagram-size and byte-budget quotas (ADR-026).
+- `jkva-ipc`: protocol v2 adds gamepad input (buttons plus axes) for the gaming platform.
 - `jkva-ipc`: versioned, length-prefixed IPC messages with framing checks (ADR-006).
 - `jkva-dom`: arena document tree with an html5ever 0.40 `TreeSink`: implied structure, entities, foster parenting, templates, quirks mode and parse diagnostics.
 - `jkva-gfx`: Metal 4 device probe, offscreen clear render, MSL triangle, GPU readback (`Image`), display-list rectangle rendering, and a textured scene renderer (alpha blending, linear sampling) for glyphs and images; `gfx-clear`, `gfx-triangle` and `gfx-dl` PNG probes.
