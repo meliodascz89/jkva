@@ -63,9 +63,9 @@ Capabilities: Apple M4, `maxBufferLength` 13,639.7 MiB, recommended working set 
 
 | Metric | p50 | p95 |
 |---|---:|---:|
-| One frame (scene build + GPU wait) | 0.62 ms | 3.40 ms |
+| One frame (scene build + GPU wait) | 0.51 ms | 2.46 ms |
 
-Scope: layout and style are static (built once), the measured frame rebuilds the scene — backgrounds, borders, glyph shaping and rasterization — uploads it and waits for the GPU, with no CPU readback. After glyph-texture and font caches the same frame dropped from 8.05 to about 0.62 ms p50 (10.81 to 3.40 ms p95, median of five runs); it is still a static page, not a game scene, and not yet comparable to Chrome.
+Scope: layout and style are static (built once), the measured frame rebuilds the scene — backgrounds, borders, glyph shaping and rasterization — uploads it and waits for the GPU, with no CPU readback. After glyph-texture, font and shaped-run caches the same frame dropped from 8.05 to about 0.51 ms p50 (10.81 to 2.46 ms p95, median of five runs); it is still a static page, not a game scene, and not yet comparable to Chrome.
 
 ## Status
 

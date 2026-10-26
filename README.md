@@ -18,7 +18,7 @@ JKva is an early-stage browser engine: its own DOM, style system, layout engine,
 
 - **M0 complete** — repository, CI, EN+CS documentation, 24 ADRs, Metal walking skeleton, IPC contracts (`jkva-ipc`), and the harness: reftest diff, corpus runner, WPT report, WPT reftests, benchmarks.
 - **M1 complete** — HTML → DOM → CSS cascade → block, inline and flex layout → shaped text → Metal → PNG; three golden pages; damage tracking seam; WPT reftest runner with published caveats.
-- **M2 in progress** — flexbox: `row`/`column`, `justify-content`, `align-items`, `align-self`, `gap`, `wrap`, `grow`/`shrink`/`basis`. Next: `order`, `align-content`, grid. Gaming: ADR-026, permission-gated UDP, frame pacing, GPU capability report and the first frame-time baseline (CPU submit p95 0.15 ms, GPU execution p95 1.22 ms on a 4096-draw scene) and the engine frame after glyph/font caches (p50 about 0.62 ms) done.
+- **M2 in progress** — flexbox: `row`/`column`, `justify-content`, `align-items`, `align-self`, `gap`, `wrap`, `grow`/`shrink`/`basis`. Next: `order`, `align-content`, grid. Gaming: ADR-026, permission-gated UDP, frame pacing, GPU capability report and the first frame-time baseline (CPU submit p95 0.15 ms, GPU execution p95 1.22 ms on a 4096-draw scene) and the engine frame after glyph/font/shaping caches (p50 about 0.51 ms) done.
 - 57 test suites green, CI green, ~1.94 ms cascade on the 602-node fixture.
 
 The checkable list, with evidence and known gaps, is [`docs/src/en/status.md`](docs/src/en/status.md) ([Czech](docs/src/cs/status.md)).

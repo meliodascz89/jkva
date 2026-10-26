@@ -255,6 +255,36 @@ impl StyleKey {
 /// assert_eq!(run.glyphs.len(), 5);
 /// assert!(run.width > 0.0);
 /// ```
+/// Key of one shaped run: the text plus every style input that affects shaping.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct ShapeKey {
+    text: String,
+    size_bits: u32,
+    weight: u16,
+    family: String,
+    italic: bool,
+}
+
+impl ShapeKey {
+    fn new(text: &str, style: &TextStyle) -> Self {
+        Self {
+            text: text.to_string(),
+            size_bits: style.effective_size().to_bits(),
+            weight: style.weight,
+            family: style.family.clone(),
+            italic: style.italic,
+        }
+    }
+}
+
+/// Upper bound on cached shaped runs before the cache is cleared.
+///
+/// Clearing wholesale is a deliberate, simple policy: a page with thousands of
+/// unique strings should not grow the cache without bound, and re-shaping after a
+/// clear is correct, only slower.
+pub const MAX_SHAPED_CACHE: usize = 4096;
+
+/// A cache of system fonts, loaded faces, resolved styles and shaped runs.
 pub struct FontCache {
     /// The system font database.
     database: Database,
@@ -266,6 +296,8 @@ pub struct FontCache {
     warnings: Vec<String>,
     /// Scratch buffers and the hinting cache used by `swash`.
     raster_context: ScaleContext,
+    /// Shaped runs keyed by text and style.
+    shaped: HashMap<ShapeKey, ShapedText>,
 }
 
 impl FontCache {
@@ -283,6 +315,7 @@ impl FontCache {
             resolutions: HashMap::new(),
             warnings: Vec::new(),
             raster_context: ScaleContext::new(),
+            shaped: HashMap::new(),
         }
     }
 
@@ -297,6 +330,25 @@ impl FontCache {
     /// fallback are reported through [`Self::warnings`], never as a panic.
     #[must_use]
     pub fn shape(&mut self, text: &str, style: &TextStyle) -> ShapedText {
+        let key = ShapeKey::new(text, style);
+        if let Some(hit) = self.shaped.get(&key) {
+            return hit.clone();
+        }
+        let shaped = self.shape_uncached(text, style);
+        if self.shaped.len() >= MAX_SHAPED_CACHE {
+            self.shaped.clear();
+        }
+        self.shaped.insert(key, shaped.clone());
+        shaped
+    }
+
+    /// Number of shaped runs currently cached (diagnostics and tests).
+    #[must_use]
+    pub fn cached_shapes(&self) -> usize {
+        self.shaped.len()
+    }
+
+    fn shape_uncached(&mut self, text: &str, style: &TextStyle) -> ShapedText {
         let size = style.effective_size();
         let Some(face_id) = self.face_for(style) else {
             return ShapedText::default();
@@ -463,6 +515,24 @@ fn push_warning(warnings: &mut Vec<String>, message: String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shaped_runs_are_cached_by_text_and_style() {
+        let mut fonts = FontCache::new();
+        let style = TextStyle::default();
+        let first = fonts.shape("Hello cache", &style);
+        let cached = fonts.cached_shapes();
+        assert!(cached >= 1);
+        let second = fonts.shape("Hello cache", &style);
+        assert_eq!(first, second);
+        assert_eq!(fonts.cached_shapes(), cached);
+        let other_style = TextStyle {
+            size: 20.0,
+            ..style
+        };
+        let _ = fonts.shape("Hello cache", &other_style);
+        assert_eq!(fonts.cached_shapes(), cached + 1);
+    }
 
     #[test]
     fn effective_size_defaults_degenerate_values() {
