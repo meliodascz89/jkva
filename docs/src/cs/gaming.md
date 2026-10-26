@@ -45,4 +45,4 @@ Měřené vlastním benchmarkem a publikované u každého milníku:
 
 ## Stav
 
-Design je v ADR-026. Hotové: permission-gated UDP transport v `jkva-net` (Tokio, default deny, grant/revoke, kvóty) a fixed-timestep `FrameClock` v `jkva-core` (cap na kroky, interpolační alpha, změna rate). Rozpracované: GPU capability probe a frame-time harness v `jkva-gfx`.
+Design je v ADR-026. Hotové: permission-gated UDP transport v `jkva-net` (Tokio, default deny, grant/revoke, kvóty) a fixed-timestep `FrameClock` v `jkva-core` (cap na kroky, interpolační alpha, změna rate). Rozpracované: GPU capability probe a frame-time harness v `jkva-gfx`. Gamepad vstup je typovaná zpráva v `jkva-ipc` protokolu v2.

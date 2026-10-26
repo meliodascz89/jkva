@@ -53,6 +53,7 @@ What is done, what is verified, and what is deliberately not done yet. Every lin
 |---|---|---|
 | Gaming treated as a first-class 0.1 goal | decided | ADR-026 in `briefing/DECISIONS.md` |
 | Permission-gated UDP (Tokio) | done | `jkva-net::udp`: default deny, per-origin and per-application grants, revoke, datagram size and byte budget |
+| Gamepad input over IPC v2 | done | `InputEvent::Gamepad` with buttons and axes |
 | Fixed-timestep frame pacing | done | `jkva-core::frame::FrameClock`: capped steps, interpolation alpha, rate change |
 | GPU capability probe and frame-time benchmark | in progress | delegated; `jkva-gfx` |
 | WebGPU / WebGL, WASM, gamepad, pointer lock, audio | not yet | M4/M6 |

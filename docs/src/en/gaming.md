@@ -45,4 +45,4 @@ A number without the scene, resolution, hardware and build is not a measurement;
 
 ## Status
 
-The design is in ADR-026. Done: the permission-gated UDP transport in `jkva-net` (Tokio, default deny, grant/revoke, quotas) and the fixed-timestep `FrameClock` in `jkva-core` (capped simulation steps, interpolation alpha, rate changes). In progress: the GPU capability probe and frame-time harness in `jkva-gfx`.
+The design is in ADR-026. Done: the permission-gated UDP transport in `jkva-net` (Tokio, default deny, grant/revoke, quotas) and the fixed-timestep `FrameClock` in `jkva-core` (capped simulation steps, interpolation alpha, rate changes). In progress: the GPU capability probe and frame-time harness in `jkva-gfx`. Gamepad input is a typed message in `jkva-ipc` protocol v2.
