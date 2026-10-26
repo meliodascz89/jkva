@@ -60,4 +60,4 @@ Dar není nákup: nekupuje funkce, prioritu ani vliv na architekturu. Projekt z�
 
 ## Licence
 
-MIT OR Apache-2.0, podle tvé volby. Viz [`LICENSE-MIT`](LICENSE-MIT) a [`LICENSE-APACHE`](LICENSE-APACHE).
+MIT. Viz [`LICENSE-MIT`](LICENSE-MIT).

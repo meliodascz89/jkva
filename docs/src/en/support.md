@@ -12,7 +12,7 @@ If you still want to fund the work, the only address is:
 - It does not buy a say in the architecture or the roadmap.
 - It does not unlock anything: there is no paid tier.
 
-The project stays public under its dual license. If a donation ever stops making sense, stop; there is no subscription and no expectation of recurring support.
+The project stays public under the MIT license. If a donation ever stops making sense, stop; there is no subscription and no expectation of recurring support.
 
 ## Where the money goes
 

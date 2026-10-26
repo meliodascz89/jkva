@@ -56,8 +56,8 @@ JKva has no paywall, no tokens, no paid features and no roadmap influence for sa
 
 **Bitcoin (BIP84, native segwit):** `bc1qg9y4mwhc4c5ekexc4nfr6vxynfq0m8nq9vqqj2`
 
-A donation is not a purchase: it does not buy features, priority or a say in the architecture. The project stays public under its dual license, and every decision stays in [`briefing/DECISIONS.md`](briefing/DECISIONS.md).
+A donation is not a purchase: it does not buy features, priority or a say in the architecture. The project stays public under the MIT license, and every decision stays in [`briefing/DECISIONS.md`](briefing/DECISIONS.md).
 
 ## License
 
-MIT See [`LICENSE-MIT`](LICENSE-MIT)
+MIT. See [`LICENSE-MIT`](LICENSE-MIT).

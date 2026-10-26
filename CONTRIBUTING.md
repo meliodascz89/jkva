@@ -6,7 +6,7 @@ Thanks for taking a look. JKva is early, so the most useful contributions right 
 
 - Read [`briefing/DECISIONS.md`](briefing/DECISIONS.md). The architecture is decided; changes to those decisions need a new ADR.
 - For anything larger than a typo, open an issue first. It is cheaper than reviewing a large pull request that goes the wrong way.
-- By contributing you agree to license your work under MIT OR Apache-2.0.
+- By contributing you agree to license your work under the MIT license.
 
 ## Build and test
 

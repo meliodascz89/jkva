@@ -12,7 +12,7 @@ Pokud i tak chceš vývoj podpořit, jediná adresa je:
 - Nekupuje vliv na architekturu ani roadmapu.
 - Nic neodemyká: žádná placená úroveň neexistuje.
 
-Projekt zůstává veřejný pod dvojí licencí. Pokud dar přestane dávat smysl, přestaň; žádné předplatné ani očekávání opakované podpory.
+Projekt zůstává veřejný pod licencí MIT. Pokud dar přestane dávat smysl, přestaň; žádné předplatné ani očekávání opakované podpory.
 
 ## Kam peníze jdou
 
