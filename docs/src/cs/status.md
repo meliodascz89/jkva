@@ -56,7 +56,8 @@ Co je hotové, co je ověřené a co se záměrně ještě nedělá. Každý ř�
 | UDP s grantem (Tokio) | hotovo | `jkva-net::udp`: default deny, grant per origin i aplikace, revoke, limity velikosti a objemu |
 | Gamepad vstup přes IPC v2 | hotovo | `InputEvent::Gamepad` s tlačítky a osami |
 | Frame pacing s pevným krokem | hotovo | `jkva-core::frame::FrameClock`: cap kroků, interpolační alpha, změna rate |
-| GPU capability probe a frame-time benchmark | rozpracováno | delegováno; `jkva-gfx` |
+| GPU capability probe | hotovo | `jkva-gfx::capabilities()`: Apple M4, 13,6 GiB max buffer, 18,2 GiB working set, timestamp counters |
+| Frame-time benchmark | hotovo | `tools/gfx-bench`: 4096 quadů, 1080p, CPU submit p95 0,153 ms, GPU execution p95 1,221 ms |
 | WebGPU / WebGL, WASM, gamepad, pointer lock, audio | zatím ne | M4/M6 |
 | Výkonnostní cíle (p95 frame time, vstupní latence) | definováno | [Herní platforma](gaming.md) |
 

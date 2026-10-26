@@ -43,6 +43,20 @@ Měřené vlastním benchmarkem a publikované u každého milníku:
 
 Číslo bez scény, rozlišení, hardwaru a buildu není měření; harness eviduje všechny čtyři.
 
+## Změřená baseline (2026-10-26, Apple M4)
+
+`cargo run --release -p gfx-bench -- --frames 120 --quads 4096 --width 1920 --height 1080`
+
+| Série | p50 | p95 |
+|---|---:|---:|
+| CPU submit | 0,129 ms | 0,153 ms |
+| GPU completion (čekání na command buffer) | 1,979 ms | 3,647 ms |
+| GPU execution (`GPUStartTime`..`GPUEndTime`) | 0,912 ms | 1,221 ms |
+
+Capabilities: Apple M4, `maxBufferLength` 13 639,7 MiB, doporučený working set 18 186,2 MiB, Apple7/8/9 a Metal4, unified memory, timestamp counters.
+
+**Tohle není game frame.** Scéna je 4096 draw callů na 1920×1080 bez layoutu, stylů, JS, WASM, kompozice, prezentace a vstupu a framy jsou plně serializované. Není to tedy důkaz splnění cíle p95 ≤ 8 ms z ADR-026 ani srovnání s Chrome/Safari, dokud stejná scéna neběží ve všech třech enginech.
+
 ## Stav
 
 Design je v ADR-026. Hotové: permission-gated UDP transport v `jkva-net` (Tokio, default deny, grant/revoke, kvóty) a fixed-timestep `FrameClock` v `jkva-core` (cap na kroky, interpolační alpha, změna rate). Rozpracované: GPU capability probe a frame-time harness v `jkva-gfx`. Gamepad vstup je typovaná zpráva v `jkva-ipc` protokolu v2.

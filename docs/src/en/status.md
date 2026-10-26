@@ -56,7 +56,8 @@ What is done, what is verified, and what is deliberately not done yet. Every lin
 | Permission-gated UDP (Tokio) | done | `jkva-net::udp`: default deny, per-origin and per-application grants, revoke, datagram size and byte budget |
 | Gamepad input over IPC v2 | done | `InputEvent::Gamepad` with buttons and axes |
 | Fixed-timestep frame pacing | done | `jkva-core::frame::FrameClock`: capped steps, interpolation alpha, rate change |
-| GPU capability probe and frame-time benchmark | in progress | delegated; `jkva-gfx` |
+| GPU capability probe | done | `jkva-gfx::capabilities()`: Apple M4, 13.6 GiB max buffer, 18.2 GiB working set, timestamp counters |
+| Frame-time benchmark | done | `tools/gfx-bench`: 4096 quads, 1080p, CPU submit p95 0.153 ms, GPU execution p95 1.221 ms |
 | WebGPU / WebGL, WASM, gamepad, pointer lock, audio | not yet | M4/M6 |
 | Performance targets (p95 frame time, input latency) | defined | [Gaming platform](gaming.md) |
 

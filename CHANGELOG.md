@@ -30,6 +30,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - `jkva-style`: `border-*-width` and `border-*-style`, with `border-width`, `border-style` and `border` shorthand expansion (border colour is still `currentColor`).
 - `jkva-style`: CSS parser, structural selector model, L4 specificity, selector matching and the cascade into `ComputedStyle` (at-rule contents, `var()` and a UA stylesheet are not implemented yet).
 - `jkva-text`: font discovery (fontdb), HarfBuzz shaping (harfrust) and glyph rasterization to alpha coverage (swash), with a documented fallback chain.
+- `jkva-gfx`: `GpuCapabilities` report (device, buffer and memory budgets, Apple7/8/9 and Metal4, unified memory, timestamp counters) with a cfg-gated test that skips when Metal is unavailable.
+- `gfx-bench`: offscreen Metal frame-time benchmark (4096 quads, 1080p, CPU submit / GPU completion / GPU execution p50+p95, JSON).
 - `jkva-core`: fixed-timestep `FrameClock` with capped simulation steps, interpolation alpha, dropped-frame reporting and runtime rate changes (ADR-026).
 - `jkva-net`: permission-gated UDP transport (Tokio), default deny, per-origin and per-application grants, revoke, datagram-size and byte-budget quotas (ADR-026).
 - `jkva-ipc`: protocol v2 adds gamepad input (buttons plus axes) for the gaming platform.

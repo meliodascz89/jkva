@@ -4,6 +4,11 @@
 //! colour into an offscreen texture, read it back and hand the pixels to the
 //! caller. The rasterizer, layers and compositor come in M3 (ADR-009).
 //!
+//! The capability report ([`capabilities`]) answers what the device can do
+//! before anything renders: memory limits, Apple GPU families and whether
+//! timestamp counters exist. Gaming performance is a 0.1 goal (ADR-026), so a
+//! number produced without the hardware identity is not a measurement.
+//!
 //! This crate owns every `unsafe` block that talks to Metal; the rest of the
 //! engine sees plain Rust data.
 
@@ -19,11 +24,12 @@ use objc2_foundation::NSString;
 use jkva_paint::{DisplayItem, DisplayList, Rect};
 use objc2_metal::{
     MTLBlendFactor, MTLClearColor, MTLCommandBuffer, MTLCommandEncoder, MTLCommandQueue,
-    MTLCreateSystemDefaultDevice, MTLDevice, MTLLibrary, MTLLoadAction, MTLOrigin, MTLPixelFormat,
-    MTLPrimitiveType, MTLRegion, MTLRenderCommandEncoder, MTLRenderPassDescriptor,
-    MTLRenderPipelineDescriptor, MTLRenderPipelineState, MTLResourceOptions, MTLSamplerAddressMode,
-    MTLSamplerDescriptor, MTLSamplerMinMagFilter, MTLSize, MTLStorageMode, MTLStoreAction,
-    MTLTexture, MTLTextureDescriptor, MTLTextureUsage,
+    MTLCounterSamplingPoint, MTLCounterSet, MTLCreateSystemDefaultDevice, MTLDevice, MTLGPUFamily,
+    MTLLibrary, MTLLoadAction, MTLOrigin, MTLPixelFormat, MTLPrimitiveType, MTLRegion,
+    MTLRenderCommandEncoder, MTLRenderPassDescriptor, MTLRenderPipelineDescriptor,
+    MTLRenderPipelineState, MTLResourceOptions, MTLSamplerAddressMode, MTLSamplerDescriptor,
+    MTLSamplerMinMagFilter, MTLSize, MTLStorageMode, MTLStoreAction, MTLTexture,
+    MTLTextureDescriptor, MTLTextureUsage,
 };
 
 /// An RGBA8 image produced by the GPU and readable on the CPU.
@@ -52,6 +58,107 @@ impl Image {
             self.rgba[i + 3],
         ])
     }
+}
+
+/// Apple GPU family membership of the default Metal device.
+///
+/// A game engine uses these queries to decide which shader features and
+/// resource limits it may rely on. On Apple Silicon the baseline is `apple7`
+/// (M1-class); each newer family adds features, so a renderer that only needs
+/// `apple7` runs on every supported Mac, while an optional path can require
+/// `apple9` for newer hardware. The exact chip-to-family mapping is Apple's;
+/// this struct only records what the device answered.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct GpuFamilies {
+    /// `MTLGPUFamilyApple7` is supported.
+    pub apple7: bool,
+    /// `MTLGPUFamilyApple8` is supported.
+    pub apple8: bool,
+    /// `MTLGPUFamilyApple9` is supported.
+    pub apple9: bool,
+    /// `MTLGPUFamilyMetal4` is supported, i.e. the Metal 4 API generation.
+    pub metal4: bool,
+}
+
+/// Snapshot of what the default Metal device can do.
+///
+/// Read it once at startup (for example while building the GPU process) and
+/// treat it as immutable for the lifetime of the process: devices do not gain
+/// memory or lose families, and a stale report is cheaper than a query per
+/// frame. A game engine needs these numbers to size its budgets and to choose
+/// feature paths instead of finding out through an out-of-memory error mid-game.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GpuCapabilities {
+    /// Marketing name reported by Metal, for example `Apple M4`.
+    ///
+    /// Benchmark reports carry it because a frame time without the hardware is
+    /// not a measurement (`docs/src/en/gaming.md`).
+    pub device_name: String,
+    /// Largest single `MTLBuffer` in bytes (`MTLDevice.maxBufferLength`).
+    ///
+    /// A level mesh, a texture atlas or a vertex batch must fit into one
+    /// buffer; a streaming game has to split an upload into chunks below this
+    /// limit or fail at runtime.
+    pub max_buffer_length: u64,
+    /// Bytes of GPU memory macOS recommends keeping resident
+    /// (`MTLDevice.recommendedMaxWorkingSetSize`).
+    ///
+    /// This is the practical GPU memory budget for a game: staying under it
+    /// avoids paging and the associated frame-time spikes. It is a
+    /// recommendation, not a hard limit, and it can be smaller than the
+    /// physical memory.
+    pub recommended_max_working_set_size: u64,
+    /// Which Apple GPU families the device answers `true` to.
+    pub families: GpuFamilies,
+    /// `true` when the GPU shares physical memory with the CPU (UMA).
+    ///
+    /// UMA is what makes JKva's zero-copy upload path possible (ADR-009); a
+    /// discrete GPU would require explicit staging copies.
+    pub supports_unified_memory: bool,
+    /// `true` when the device exposes a timestamp counter set that can be
+    /// sampled at stage boundaries.
+    ///
+    /// Games need real per-pass GPU timings, not guesses. When this is `false`
+    /// the engine can still measure command-buffer completion wall time, but
+    /// not the duration of an individual pass; see the frame-time benchmark
+    /// limitations. The flag is true only when Metal reports both the
+    /// `timestamp` counter set and `MTLCounterSamplingPointAtStageBoundary`
+    /// support.
+    pub supports_timestamp_counters: bool,
+}
+
+/// Reports the capabilities of the default Metal device.
+///
+/// # Errors
+///
+/// Returns an error when Metal is unavailable, for example in a headless
+/// container without a GPU. Callers must fall back to a non-GPU path instead of
+/// assuming a device exists.
+pub fn capabilities() -> Result<GpuCapabilities, String> {
+    let device = MTLCreateSystemDefaultDevice().ok_or("no Metal device")?;
+    Ok(GpuCapabilities {
+        device_name: device.name().to_string(),
+        max_buffer_length: device.maxBufferLength() as u64,
+        recommended_max_working_set_size: device.recommendedMaxWorkingSetSize(),
+        families: GpuFamilies {
+            apple7: device.supportsFamily(MTLGPUFamily::Apple7),
+            apple8: device.supportsFamily(MTLGPUFamily::Apple8),
+            apple9: device.supportsFamily(MTLGPUFamily::Apple9),
+            metal4: device.supportsFamily(MTLGPUFamily::Metal4),
+        },
+        supports_unified_memory: device.hasUnifiedMemory(),
+        supports_timestamp_counters: has_counter_set(&device, "timestamp")
+            && device.supportsCounterSampling(MTLCounterSamplingPoint::AtStageBoundary),
+    })
+}
+
+/// Returns `true` when the device advertises a counter set whose name contains
+/// `needle` (Metal names the timestamp set `timestamp`).
+fn has_counter_set(device: &ProtocolObject<dyn MTLDevice>, needle: &str) -> bool {
+    device.counterSets().is_some_and(|sets| {
+        sets.iter()
+            .any(|set| set.name().to_string().to_ascii_lowercase().contains(needle))
+    })
 }
 
 /// Returns the name of the Metal device used for rendering, if any.
@@ -790,5 +897,40 @@ mod tests {
         assert_eq!(image.width, 4);
         assert_eq!(image.rgba.len(), 64);
         assert_eq!(image.pixel(0, 0), Some([255, 0, 0, 255]));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn capabilities_describe_the_metal_device() {
+        let capabilities = match capabilities() {
+            Ok(capabilities) => capabilities,
+            Err(error) => {
+                // GitHub's macOS runners can boot without a usable GPU, so this
+                // test is skipped there; on a real Apple Silicon Mac it asserts.
+                eprintln!("skipped: Metal unavailable: {error}");
+                return;
+            }
+        };
+        assert!(
+            !capabilities.device_name.is_empty(),
+            "device name must be populated"
+        );
+        assert!(
+            capabilities.max_buffer_length >= 1 << 20,
+            "a Metal device must allow at least a 1 MiB buffer, got {}",
+            capabilities.max_buffer_length
+        );
+        assert!(
+            capabilities.recommended_max_working_set_size > 0,
+            "recommended working set size must be populated"
+        );
+        // Families are monotonically nested: a device that knows Apple9 also
+        // knows Apple7. This is a real invariant, not a hardware assumption.
+        if capabilities.families.apple9 {
+            assert!(capabilities.families.apple7);
+        }
+        if capabilities.families.apple8 {
+            assert!(capabilities.families.apple7);
+        }
     }
 }

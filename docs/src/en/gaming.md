@@ -43,6 +43,20 @@ Measured in our own benchmark, published with every milestone:
 
 A number without the scene, resolution, hardware and build is not a measurement; the benchmark harness records all four.
 
+## Measured baseline (2026-10-26, Apple M4)
+
+`cargo run --release -p gfx-bench -- --frames 120 --quads 4096 --width 1920 --height 1080`
+
+| Series | p50 | p95 |
+|---|---:|---:|
+| CPU submit | 0.129 ms | 0.153 ms |
+| GPU completion (command-buffer wait) | 1.979 ms | 3.647 ms |
+| GPU execution (`GPUStartTime`..`GPUEndTime`) | 0.912 ms | 1.221 ms |
+
+Capabilities: Apple M4, `maxBufferLength` 13,639.7 MiB, recommended working set 18,186.2 MiB, Apple7/8/9 and Metal4, unified memory, timestamp counters.
+
+**This is not a game frame.** The scene is 4096 draw calls over 1920×1080 with no layout, style, JS, WASM, compositing, presentation or input, and frames are fully serialized. It is therefore neither evidence that the ADR-026 p95 ≤ 8 ms target is met nor comparable to Chrome/Safari until the same scene runs in all three engines.
+
 ## Status
 
 The design is in ADR-026. Done: the permission-gated UDP transport in `jkva-net` (Tokio, default deny, grant/revoke, quotas) and the fixed-timestep `FrameClock` in `jkva-core` (capped simulation steps, interpolation alpha, rate changes). In progress: the GPU capability probe and frame-time harness in `jkva-gfx`. Gamepad input is a typed message in `jkva-ipc` protocol v2.

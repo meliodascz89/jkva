@@ -194,6 +194,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "gfx-bench"
+version = "0.0.0"
+dependencies = [
+ "jkva-gfx",
+ "objc2",
+ "objc2-foundation",
+ "objc2-metal",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "harfrust"
 version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
