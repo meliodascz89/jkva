@@ -175,7 +175,7 @@ impl GpuExecutor {
                             region,
                             0,
                             pixels,
-                            width as usize * 4,
+                            width * 4,
                         );
                     }
                 }
