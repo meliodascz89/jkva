@@ -53,6 +53,7 @@ Co je hotové, co je ověřené a co se záměrně ještě nedělá. Každý ř�
 |---|---|---|
 | Hraní jako první třída 0.1 | rozhodnuto | ADR-026 v `briefing/DECISIONS.md` |
 | UDP s grantem (Tokio) | hotovo | `jkva-net::udp`: default deny, grant per origin i aplikace, revoke, limity velikosti a objemu |
+| Frame pacing s pevným krokem | hotovo | `jkva-core::frame::FrameClock`: cap kroků, interpolační alpha, změna rate |
 | GPU capability probe a frame-time benchmark | rozpracováno | delegováno; `jkva-gfx` |
 | WebGPU / WebGL, WASM, gamepad, pointer lock, audio | zatím ne | M4/M6 |
 | Výkonnostní cíle (p95 frame time, vstupní latence) | definováno | [Herní platforma](gaming.md) |

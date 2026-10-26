@@ -12,6 +12,10 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+pub mod frame;
+
+pub use frame::{DEFAULT_MAX_STEPS, FrameClock, FrameStep};
+
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;

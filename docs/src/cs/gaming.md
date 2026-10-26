@@ -45,4 +45,4 @@ Měřené vlastním benchmarkem a publikované u každého milníku:
 
 ## Stav
 
-Design je v ADR-026. První implementační řez je permission-gated UDP transport v `jkva-net` (Tokio, default deny, testy grant/revoke). GPU capability probe a frame-time harness následují v M2/M3.
+Design je v ADR-026. Hotové: permission-gated UDP transport v `jkva-net` (Tokio, default deny, grant/revoke, kvóty) a fixed-timestep `FrameClock` v `jkva-core` (cap na kroky, interpolační alpha, změna rate). Rozpracované: GPU capability probe a frame-time harness v `jkva-gfx`.

@@ -29,6 +29,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - `jkva-style`: `border-*-width` and `border-*-style`, with `border-width`, `border-style` and `border` shorthand expansion (border colour is still `currentColor`).
 - `jkva-style`: CSS parser, structural selector model, L4 specificity, selector matching and the cascade into `ComputedStyle` (at-rule contents, `var()` and a UA stylesheet are not implemented yet).
 - `jkva-text`: font discovery (fontdb), HarfBuzz shaping (harfrust) and glyph rasterization to alpha coverage (swash), with a documented fallback chain.
+- `jkva-core`: fixed-timestep `FrameClock` with capped simulation steps, interpolation alpha, dropped-frame reporting and runtime rate changes (ADR-026).
 - `jkva-net`: permission-gated UDP transport (Tokio), default deny, per-origin and per-application grants, revoke, datagram-size and byte-budget quotas (ADR-026).
 - `jkva-ipc`: versioned, length-prefixed IPC messages with framing checks (ADR-006).
 - `jkva-dom`: arena document tree with an html5ever 0.40 `TreeSink`: implied structure, entities, foster parenting, templates, quirks mode and parse diagnostics.
