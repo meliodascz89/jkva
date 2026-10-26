@@ -30,8 +30,10 @@ use jkva_dom::{Document, NodeId, NodeKind};
 use jkva_engine::parse_page;
 use jkva_gfx::{Image, Scene, SceneItem, SceneRenderer, TextureData};
 use jkva_layout::{
-    AlignContent, AlignItems, Display, Edges, FlexDirection, FlexWrap, JustifyContent, LayoutTree,
-    Length, LengthEdges, StyleSource, TextMeasure, Viewport as LayoutViewport, layout, parse_order,
+    AlignContent, AlignItems, Display, Edges, FlexDirection, FlexWrap, GridAutoRows, GridTrack,
+    JustifyContent, LayoutTree, Length, LengthEdges, StyleSource, TextMeasure,
+    Viewport as LayoutViewport, layout, parse_grid_auto_rows, parse_grid_template_columns,
+    parse_order,
 };
 use jkva_paint::{DamageRegion, Rect as PaintRect};
 use jkva_style::{ComputedStyle, ComputedStyleMap, StyleEngine, Stylesheet};
@@ -547,6 +549,18 @@ impl StyleSource for Styles<'_> {
             Some("stretch") => Some(AlignItems::Stretch),
             _ => None,
         }
+    }
+
+    fn grid_template_columns(&self, node: NodeId) -> Vec<GridTrack> {
+        self.map.get(node).map_or_else(Vec::new, |style| {
+            parse_grid_template_columns(&style.grid_template_columns)
+        })
+    }
+
+    fn grid_auto_rows(&self, node: NodeId) -> GridAutoRows {
+        self.map.get(node).map_or(GridAutoRows::Auto, |style| {
+            parse_grid_auto_rows(&style.grid_auto_rows)
+        })
     }
 
     fn gap(&self, node: NodeId) -> f32 {

@@ -1095,6 +1095,8 @@ enum PropertyId {
     FlexBasis,
     Order,
     AlignContent,
+    GridTemplateColumns,
+    GridAutoRows,
     FontSize,
     FontWeight,
     FontFamily,
@@ -1102,7 +1104,7 @@ enum PropertyId {
 
 impl PropertyId {
     /// Number of tracked properties.
-    const COUNT: usize = 39;
+    const COUNT: usize = 41;
 
     /// Every tracked property, ordered by [`PropertyId::index`].
     const ALL: [Self; Self::COUNT] = [
@@ -1142,6 +1144,8 @@ impl PropertyId {
         Self::FlexBasis,
         Self::Order,
         Self::AlignContent,
+        Self::GridTemplateColumns,
+        Self::GridAutoRows,
         Self::FontSize,
         Self::FontWeight,
         Self::FontFamily,
@@ -1186,9 +1190,11 @@ impl PropertyId {
             Self::FlexBasis => 33,
             Self::Order => 34,
             Self::AlignContent => 35,
-            Self::FontSize => 36,
-            Self::FontWeight => 37,
-            Self::FontFamily => 38,
+            Self::GridTemplateColumns => 36,
+            Self::GridAutoRows => 37,
+            Self::FontSize => 38,
+            Self::FontWeight => 39,
+            Self::FontFamily => 40,
         }
     }
 
@@ -1233,6 +1239,8 @@ impl PropertyId {
             "flex-basis" => Self::FlexBasis,
             "order" => Self::Order,
             "align-content" => Self::AlignContent,
+            "grid-template-columns" => Self::GridTemplateColumns,
+            "grid-auto-rows" => Self::GridAutoRows,
             "font-size" => Self::FontSize,
             "font-weight" => Self::FontWeight,
             "font-family" => Self::FontFamily,
@@ -1290,6 +1298,8 @@ impl PropertyId {
             Self::FlexBasis => "auto",
             Self::Order => "0",
             Self::AlignContent => "stretch",
+            Self::GridTemplateColumns => "none",
+            Self::GridAutoRows => "auto",
             // `medium` computes to 16px under default font settings; this crate
             // does not absolutise lengths, so the two spellings differ once a
             // document declares `font-size: medium` explicitly.
@@ -1352,6 +1362,8 @@ impl PropertyId {
             Self::FlexBasis => &style.flex_basis,
             Self::Order => &style.order,
             Self::AlignContent => &style.align_content,
+            Self::GridTemplateColumns => &style.grid_template_columns,
+            Self::GridAutoRows => &style.grid_auto_rows,
             Self::FontSize => &style.font_size,
             Self::FontWeight => &style.font_weight,
             Self::FontFamily => &style.font_family,
@@ -1404,6 +1416,8 @@ impl PropertyId {
             Self::FlexBasis => style.flex_basis = value.to_owned(),
             Self::Order => style.order = value.to_owned(),
             Self::AlignContent => style.align_content = value.to_owned(),
+            Self::GridTemplateColumns => style.grid_template_columns = value.to_owned(),
+            Self::GridAutoRows => style.grid_auto_rows = value.to_owned(),
             Self::FontSize => style.font_size = value.to_owned(),
             Self::FontWeight => style.font_weight = value.to_owned(),
             Self::FontFamily => style.font_family = value.to_owned(),
@@ -1480,6 +1494,8 @@ mod tests {
             PropertyId::FlexBasis => "flex-basis",
             PropertyId::Order => "order",
             PropertyId::AlignContent => "align-content",
+            PropertyId::GridTemplateColumns => "grid-template-columns",
+            PropertyId::GridAutoRows => "grid-auto-rows",
             PropertyId::FontSize => "font-size",
             PropertyId::FontWeight => "font-weight",
             PropertyId::FontFamily => "font-family",

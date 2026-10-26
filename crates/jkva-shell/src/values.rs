@@ -459,6 +459,8 @@ pub fn layout_display(display: DisplayType) -> Display {
         Display::None
     } else if display == DisplayType::Flex {
         Display::Flex
+    } else if display == DisplayType::Grid {
+        Display::Grid
     } else if display.is_inline() {
         Display::Inline
     } else {
@@ -525,5 +527,6 @@ mod tests {
         assert_eq!(layout_display(DisplayType::Inline), Display::Inline);
         assert_eq!(layout_display(DisplayType::None), Display::None);
         assert_eq!(layout_display(DisplayType::Flex), Display::Flex);
+        assert_eq!(layout_display(DisplayType::Grid), Display::Grid);
     }
 }

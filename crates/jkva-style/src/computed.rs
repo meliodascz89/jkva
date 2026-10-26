@@ -257,6 +257,14 @@ pub struct ComputedStyle {
     pub order: String,
     /// The `align-content` property. Not inherited.
     pub align_content: String,
+    /// The `grid-template-columns` property, as declared text. Not inherited.
+    ///
+    /// The cascade keeps the raw value; layout parses the small track grammar from it.
+    /// This crate does not depend on `jkva-layout`, so the parser is named here in prose:
+    /// `jkva_layout::parse_grid_template_columns`.
+    pub grid_template_columns: String,
+    /// The `grid-auto-rows` property, as declared text. Not inherited.
+    pub grid_auto_rows: String,
     /// The `font-size` property. Inherited.
     pub font_size: String,
     /// The `font-weight` property. Inherited.
@@ -325,6 +333,8 @@ impl ComputedStyle {
             flex_basis: String::new(),
             order: String::new(),
             align_content: String::new(),
+            grid_template_columns: String::new(),
+            grid_auto_rows: String::new(),
             font_size: String::new(),
             font_weight: String::new(),
             font_family: String::new(),
@@ -382,6 +392,8 @@ impl ComputedStyle {
             flex_basis: "auto".to_owned(),
             order: "0".to_owned(),
             align_content: "stretch".to_owned(),
+            grid_template_columns: "none".to_owned(),
+            grid_auto_rows: "auto".to_owned(),
             font_size: "16px".to_owned(),
             font_weight: "normal".to_owned(),
             font_family: String::new(),

@@ -43,11 +43,21 @@ pub enum Display {
     None,
     /// `display: block` — the element is laid out in block flow.
     Block,
-    /// `display: flex` — a block-level single-line flex container.
+    /// `display: flex` — a block-level flex container.
     ///
     /// Its children become flex items and are laid out by the flex algorithm instead
     /// of block flow; see `jkva_layout::engine` for the modelled subset.
     Flex,
+    /// `display: grid` — a block-level grid container.
+    ///
+    /// Its children are placed row-major into a column template; see
+    /// `jkva_layout::engine` for the modelled subset.
+    ///
+    /// `inline-grid` is **not** represented: the engine currently maps it like an inline
+    /// box, so it is flattened into the surrounding inline flow. Mapping it to
+    /// [`Display::Grid`] would make it behave as a block-level grid container, which is
+    /// the documented fallback until inline-level grid containers exist.
+    Grid,
     /// `display: inline` — an inline box inside the nearest block's inline flow.
     ///
     /// This is the CSS initial value, and therefore the default.
@@ -297,6 +307,102 @@ pub enum AlignContent {
     Stretch,
 }
 
+/// One column track of a simple grid template.
+///
+/// Produced by [`parse_grid_template_columns`] from the cascade's text. The grammar is
+/// deliberately small: `Npx`, `Nfr`, `auto` and `N%` separated by whitespace. There is no
+/// `repeat()`, no `minmax()`, no named lines and no `fit-content()`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum GridTrack {
+    /// A fixed track, in CSS pixels.
+    Px(f32),
+    /// A share of the space left after the fixed, percentage and auto tracks, by factor.
+    Fr(f32),
+    /// As wide as the widest item's max-content contribution in that column.
+    Auto,
+    /// A percentage of the grid container's content width.
+    Percent(f32),
+}
+
+/// How the implicit rows of a grid are sized.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum GridAutoRows {
+    /// Every row is this many CSS pixels tall.
+    Px(f32),
+    /// Every row is as tall as its tallest item (the initial value).
+    #[default]
+    Auto,
+}
+
+/// Parses a `grid-template-columns` value into column tracks.
+///
+/// The grammar is a whitespace-separated list of `Npx`, `Nfr`, `auto` and `N%`. Tokens
+/// that do not parse are skipped; a value that uses an unsupported construct
+/// (`repeat(`, `minmax(`, `fit-content(`, `[` named lines) or is `none`/empty yields no
+/// tracks at all, which layout treats as one implicit column.
+///
+/// Negative, non-finite and non-numeric sizes are ignored, `0fr` is a valid (zero-width)
+/// track, and the caller can never get a track that would corrupt the column geometry.
+#[must_use]
+pub fn parse_grid_template_columns(value: &str) -> Vec<GridTrack> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("none") {
+        return Vec::new();
+    }
+    // These constructs change the shape of the template, so a partial parse would be
+    // worse than no template at all.
+    if ["repeat(", "minmax(", "fit-content(", "["]
+        .iter()
+        .any(|unsupported| trimmed.contains(unsupported))
+    {
+        return Vec::new();
+    }
+    trimmed
+        .split_whitespace()
+        .filter_map(parse_grid_track)
+        .collect()
+}
+
+/// Parses one track token, or `None` when it is not part of the small grammar.
+fn parse_grid_track(token: &str) -> Option<GridTrack> {
+    let lower = token.to_ascii_lowercase();
+    if lower == "auto" {
+        return Some(GridTrack::Auto);
+    }
+    if let Some(number) = lower.strip_suffix("px") {
+        return Some(GridTrack::Px(parse_track_number(number)?));
+    }
+    if let Some(number) = lower.strip_suffix("fr") {
+        return Some(GridTrack::Fr(parse_track_number(number)?));
+    }
+    if let Some(number) = lower.strip_suffix('%') {
+        return Some(GridTrack::Percent(parse_track_number(number)?));
+    }
+    None
+}
+
+/// Parses a non-negative, finite track number.
+fn parse_track_number(number: &str) -> Option<f32> {
+    let value: f32 = number.trim().parse().ok()?;
+    (value.is_finite() && value >= 0.0).then_some(value)
+}
+
+/// Parses a `grid-auto-rows` value.
+///
+/// Accepts a single `Npx` length or `auto`; everything else (including a track list,
+/// which the property does not take here) falls back to [`GridAutoRows::Auto`].
+#[must_use]
+pub fn parse_grid_auto_rows(value: &str) -> GridAutoRows {
+    let trimmed = value.trim().to_ascii_lowercase();
+    if trimmed == "auto" {
+        return GridAutoRows::Auto;
+    }
+    match trimmed.strip_suffix("px").and_then(parse_track_number) {
+        Some(px) => GridAutoRows::Px(px),
+        None => GridAutoRows::Auto,
+    }
+}
+
 /// Parses a declared CSS `order` value.
 ///
 /// The cascade keeps property values as text, so whoever implements
@@ -458,9 +564,27 @@ pub trait StyleSource {
         AlignContent::Stretch
     }
 
-    /// Returns the flex gap in CSS pixels, applied to both axes.
+    /// Returns the parsed `grid-template-columns` of a grid container.
     ///
-    /// The same value separates items on a line and lines from each other.
+    /// The cascade keeps the property as text; an implementation parses it with
+    /// [`parse_grid_template_columns`]. An empty result means "no explicit template", and
+    /// layout then uses one implicit column that fills the container width.
+    fn grid_template_columns(&self, _node: NodeId) -> Vec<GridTrack> {
+        Vec::new()
+    }
+
+    /// Returns how the implicit rows of a grid are sized.
+    ///
+    /// Defaults to [`GridAutoRows::Auto`], where every row is as tall as its tallest
+    /// item; parse the cascade's text with [`parse_grid_auto_rows`].
+    fn grid_auto_rows(&self, _node: NodeId) -> GridAutoRows {
+        GridAutoRows::Auto
+    }
+
+    /// Returns the flex and grid gap in CSS pixels, applied to both axes.
+    ///
+    /// The same value separates items on a line and lines from each other, and grid
+    /// columns and rows from each other.
     fn gap(&self, _node: NodeId) -> f32 {
         0.0
     }
@@ -577,6 +701,58 @@ mod tests {
         assert_eq!(source.flex_basis(node), Length::Auto);
         assert_eq!(source.order(node), 0);
         assert_eq!(source.align_content(node), AlignContent::Stretch);
+    }
+
+    #[test]
+    fn grid_template_columns_parse_the_small_grammar() {
+        assert_eq!(
+            parse_grid_template_columns("60px 1fr auto 25%"),
+            vec![
+                GridTrack::Px(60.0),
+                GridTrack::Fr(1.0),
+                GridTrack::Auto,
+                GridTrack::Percent(25.0),
+            ]
+        );
+        // Case-insensitive units and surrounding whitespace.
+        assert_eq!(
+            parse_grid_template_columns(" 2FR  0fr AUTO "),
+            vec![GridTrack::Fr(2.0), GridTrack::Fr(0.0), GridTrack::Auto]
+        );
+        // `none`, empty and unsupported constructs yield no template.
+        for value in [
+            "",
+            "   ",
+            "none",
+            "NONE",
+            "repeat(3, 1fr)",
+            "minmax(100px, 1fr)",
+            "fit-content(20%)",
+            "[a] 1fr",
+        ] {
+            assert!(parse_grid_template_columns(value).is_empty(), "{value}");
+        }
+        // A partial template skips the tokens it cannot read.
+        assert_eq!(
+            parse_grid_template_columns("60px nonsense 1fr"),
+            vec![GridTrack::Px(60.0), GridTrack::Fr(1.0)]
+        );
+        // Negative and non-finite tracks are ignored.
+        assert!(parse_grid_template_columns("-10px").is_empty());
+        assert!(parse_grid_template_columns("infpx").is_empty());
+    }
+
+    #[test]
+    fn grid_auto_rows_parses_a_single_length_or_auto() {
+        assert_eq!(parse_grid_auto_rows("auto"), GridAutoRows::Auto);
+        assert_eq!(parse_grid_auto_rows(" 40PX "), GridAutoRows::Px(40.0));
+        assert_eq!(parse_grid_auto_rows("0px"), GridAutoRows::Px(0.0));
+        // Anything else keeps the initial value.
+        assert_eq!(parse_grid_auto_rows("40px 60px"), GridAutoRows::Auto);
+        assert_eq!(parse_grid_auto_rows("-5px"), GridAutoRows::Auto);
+        assert_eq!(parse_grid_auto_rows("nonsense"), GridAutoRows::Auto);
+        assert_eq!(parse_grid_auto_rows(""), GridAutoRows::Auto);
+        assert_eq!(GridAutoRows::default(), GridAutoRows::Auto);
     }
 
     #[test]

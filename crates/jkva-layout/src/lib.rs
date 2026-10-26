@@ -95,6 +95,12 @@
 //!   sized by the maximum width of their own inline content (a documented approximation,
 //!   see below), and `stretch` fills the line's cross size unless the item declares a
 //!   height.
+//! * **Grid flow.** An element with `display: grid` is a block-level grid container with a
+//!   small `grid-template-columns` grammar (`Npx`, `Nfr`, `auto`, `N%`), implicit rows
+//!   from `grid-auto-rows` (`Npx` or `auto`), one `gap` for both axes, and row-major
+//!   placement. Items fill their cell unless they declare a size; there is no explicit
+//!   placement, no spans, no dense packing and no `repeat()`/`minmax()`. `inline-grid` is
+//!   not represented and falls back to inline flow today.
 //! * **`display: none`.** The element and its whole subtree produce no boxes.
 //!
 //! # Simplifications (deliberate, documented)
@@ -123,9 +129,16 @@
 //!    variant; the engine maps `inline-flex` to [`Display::Inline`] today, so it is
 //!    flattened into the surrounding inline flow. Mapping it to [`Display::Flex`] would
 //!    make it behave as a block-level flex container, which is the intended fallback.
-//! 4. **No float, no grid, no table, no `position`.** Those boxes are in normal flow.
-//!    `inline-block`, `grid`, `table-*` and `list-item` must be mapped to [`Display`] by
-//!    the engine for now.
+//! 4. **Grid is a first subset, and there is no float, table or `position`.** The grid
+//!    track grammar is fixed (`Npx`, `Nfr`, `auto`, `N%`; no `repeat()`, `minmax()`, named
+//!    lines or `fit-content()`), rows are always implicit (no `grid-template-rows`),
+//!    placement is row-major (no explicit placement, spans, dense packing or `order` for
+//!    grid items) and there is no `justify-items`/`align-items` for grid: an item fills its
+//!    cell unless it declares a size, and a declared size leaves it start-aligned. `auto`
+//!    tracks are sized by the max-content approximation of their widest item and are not
+//!    stretched to fill the container. `inline-grid` is not represented. `float`,
+//!    `table-*`, `list-item`, `inline-block` and `position` are still in normal flow and
+//!    must be mapped to [`Display`] by the engine for now.
 //! 5. **Margin collapsing is minimal.** Only adjacent block siblings collapse, as
 //!    `max(bottom, top)`. Negative margins are clamped to zero instead of participating
 //!    in the CSS rule that adds the most negative margin. Parent/child collapsing
@@ -179,8 +192,9 @@ pub mod tree;
 pub use engine::layout;
 pub use geometry::{Point, Rect, Size};
 pub use style::{
-    AlignContent, AlignItems, Display, Edges, FlexDirection, FlexWrap, JustifyContent, Length,
-    LengthEdges, StyleSource, parse_order,
+    AlignContent, AlignItems, Display, Edges, FlexDirection, FlexWrap, GridAutoRows, GridTrack,
+    JustifyContent, Length, LengthEdges, StyleSource, parse_grid_auto_rows,
+    parse_grid_template_columns, parse_order,
 };
 pub use text::{LINE_HEIGHT_FACTOR, TextMeasure, TextRun};
 pub use tree::{LayoutBox, LayoutTree, Viewport};

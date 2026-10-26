@@ -124,6 +124,16 @@ fn order_and_align_content_compute() {
 }
 
 #[test]
+fn grid_columns_and_auto_rows_compute() {
+    let document = parse_html(r#"<div id="box">x</div>"#);
+    let engine =
+        engine_of("div { grid-template-columns: 60px 1fr auto 25%; grid-auto-rows: 40px }");
+    let style = style_of(&document, &engine.compute_styles(&document), "box");
+    assert_eq!(style.grid_template_columns, "60px 1fr auto 25%");
+    assert_eq!(style.grid_auto_rows, "40px");
+}
+
+#[test]
 fn border_shorthand_sets_width_and_style_on_every_side() {
     let document = parse_html(r#"<div id="box">x</div>"#);
     let engine = engine_of("div { border: 3px solid #00ff00 }");

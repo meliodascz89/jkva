@@ -46,6 +46,7 @@ Co je hotové, co je ověřené a co se záměrně ještě nedělá. Každý ř�
 | Korpusová stránka se zlatým obrázkem | hotovo | `examples/flex.html`, `examples/expected/flex.png` |
 | Wrap, `flex-grow`/`shrink`/`basis` | hotovo | zalamování řádků, distribuce grow/shrink, basis, procentní basis |
 | `order` a `align-content` | hotovo | stabilní řazení podle order; šest režimů align-content pro víceřádkové rows |
+| Grid (podmnožina) | hotovo | `grid-template-columns` s px/fr/auto/%, `grid-auto-rows`, gap, row-major placement |
 | Wrap ve sloupci, `align-content` na sloupcích, intrinsic min/max | zatím ne | další krok M2 |
 | Grid, tabulky, floaty, obrázky, scroll, hit testing, vrstvy | zatím ne | M2 |
 

@@ -56,6 +56,25 @@
 //! which is what CSS does for flex items), and each bare text node child becomes its own
 //! anonymous item with `flex: 0 1 auto` semantics.
 //!
+//! # Grid
+//!
+//! A grid container ([`Display::Grid`], a block-level box) places its children row-major
+//! into a column template: item `i` sits in row `i / columns` and column `i % columns`.
+//! Columns are sized from `grid-template-columns`: `Npx` and `N%` (against the container
+//! content width) take their size, `auto` takes the widest item contribution in the
+//! column, and `Nfr` tracks share what is left after the fixed, percentage and auto tracks
+//! and the gaps. An empty or unsupported template is one implicit column that fills the
+//! container width.
+//!
+//! Rows are always implicit, sized by `grid-auto-rows` (a single `Npx` or `auto`, the
+//! tallest item of the row). Items are laid out once at the container's content origin and
+//! then translated into their cells: an item fills its cell unless it declares a width or
+//! a height (a declared size wins and leaves the item start-aligned in the cell), and the
+//! row stretch patches the used height afterwards, just like the flex stretch.
+//!
+//! There is no explicit placement, no spans, no dense packing, no `grid-template-rows`, no
+//! `repeat()`/`minmax()` and no `order` for grid items.
+//!
 //! # Vertical margins
 //!
 //! Only adjacent block siblings collapse, and only as `max(margin_bottom, margin_top)`.
@@ -76,8 +95,8 @@ use jkva_dom::{Document, NodeId, NodeKind};
 
 use crate::geometry::{Point, Rect};
 use crate::style::{
-    AlignContent, AlignItems, Display, Edges, FlexDirection, FlexWrap, JustifyContent, Length,
-    StyleSource,
+    AlignContent, AlignItems, Display, Edges, FlexDirection, FlexWrap, GridAutoRows, GridTrack,
+    JustifyContent, Length, StyleSource,
 };
 use crate::text::{LINE_HEIGHT_FACTOR, TextMeasure, TextRun};
 use crate::tree::{LayoutBox, LayoutTree, Viewport};
@@ -415,6 +434,116 @@ struct FlexLine {
     items: Vec<usize>,
     /// Cross size of the line, known after the items have been laid out.
     cross_size: f32,
+}
+
+/// One grid item after its cell has been decided.
+struct GridItem {
+    /// `true` for the anonymous item wrapped around a bare text node.
+    anonymous_text: bool,
+    /// Used margins, resolved against the container's content width.
+    margin: Edges,
+    /// Resolved padding.
+    padding: Edges,
+    /// Resolved border widths.
+    border: Edges,
+    /// Declared content width, or the max-content approximation when the item does not
+    /// declare one. It is the item's contribution to an `auto` track.
+    base_width: f32,
+    /// Whether the width came from a declaration (and so beats the cell stretch).
+    width_declared: bool,
+    /// Content width after the cell is known.
+    content_width: f32,
+    /// Border-box height produced by the layout pass (or by the row stretch).
+    border_height: f32,
+    /// Index of the item's own box, and so the first box of its subtree.
+    start: usize,
+    /// One past the last box of the item's subtree.
+    end: usize,
+    /// Whether the item declared a height; the row stretch must not override it.
+    height_declared: bool,
+    /// Content height forced by the row stretch.
+    forced_height: Option<f32>,
+}
+
+impl GridItem {
+    /// Outer (margin-box) height of the item.
+    fn outer_height(&self) -> f32 {
+        self.margin.vertical() + self.border_height
+    }
+
+    /// The width this item contributes to an `auto` track, margin box included.
+    fn column_contribution(&self) -> f32 {
+        self.base_width
+            + self.padding.horizontal()
+            + self.border.horizontal()
+            + self.margin.horizontal()
+    }
+}
+
+/// Resolves the used width of every grid column track.
+///
+/// Fixed and percentage tracks take their declared size, `auto` tracks take the widest
+/// item contribution in their column, and `fr` tracks share what is left after the fixed,
+/// percentage and auto tracks and the gaps. If the fixed tracks already overrun the
+/// container, the `fr` tracks become zero and the grid overflows, which is what CSS does
+/// without shrinking tracks. An empty template means one implicit column that fills the
+/// container.
+fn grid_track_widths(
+    items: &[GridItem],
+    tracks: &[GridTrack],
+    columns: usize,
+    container_width: f32,
+    gap: f32,
+) -> Vec<f32> {
+    if tracks.is_empty() {
+        return vec![finite_non_negative(container_width)];
+    }
+    let mut widths: Vec<f32> = vec![0.0; columns];
+    let mut fixed = 0.0;
+    for (index, track) in tracks.iter().enumerate().take(columns) {
+        match track {
+            GridTrack::Px(px) => {
+                widths[index] = finite_non_negative(*px);
+                fixed += widths[index];
+            }
+            GridTrack::Percent(percent) => {
+                widths[index] = finite_non_negative(container_width * percent / 100.0);
+                fixed += widths[index];
+            }
+            // Sized below, once the items of every column are known.
+            GridTrack::Auto | GridTrack::Fr(_) => {}
+        }
+    }
+    // `auto` tracks are as wide as their widest item.
+    for (index, width) in widths.iter_mut().enumerate() {
+        if !matches!(tracks.get(index), Some(GridTrack::Auto)) {
+            continue;
+        }
+        let mut widest: f32 = 0.0;
+        for item in items.iter().skip(index).step_by(columns) {
+            widest = widest.max(item.column_contribution());
+        }
+        *width = widest;
+        fixed += widest;
+    }
+    // `fr` tracks share the space left after the fixed, percentage and auto tracks.
+    let gaps = gap * columns.saturating_sub(1) as f32;
+    let remaining = finite_non_negative(container_width - fixed - gaps);
+    let factor_sum: f32 = tracks
+        .iter()
+        .map(|track| match track {
+            GridTrack::Fr(factor) => finite_non_negative(*factor),
+            _ => 0.0,
+        })
+        .sum();
+    if factor_sum > 0.0 {
+        for (index, track) in tracks.iter().enumerate().take(columns) {
+            if let GridTrack::Fr(track_factor) = *track {
+                widths[index] = remaining * finite_non_negative(track_factor) / factor_sum;
+            }
+        }
+    }
+    widths
 }
 
 /// The outer main-axis size of an item.
@@ -844,10 +973,10 @@ impl Layouter<'_> {
             width: inner_width,
         };
         let definite_height = self.styles.height(node).resolve(None);
-        let (children, children_height) = if self.styles.display(node) == Display::Flex {
-            self.layout_flex_content(node, inner, content_top, definite_height)
-        } else {
-            self.layout_content(node, inner, content_top)
+        let (children, children_height) = match self.styles.display(node) {
+            Display::Flex => self.layout_flex_content(node, inner, content_top, definite_height),
+            Display::Grid => self.layout_grid_content(node, inner, content_top),
+            _ => self.layout_content(node, inner, content_top),
         };
         let content_height = layout
             .forced_content_height
@@ -905,7 +1034,7 @@ impl Layouter<'_> {
         let gap = finite_non_negative(self.styles.gap(node));
 
         let mut nodes = Vec::new();
-        self.collect_flex_items(node, &mut nodes);
+        self.collect_box_items(node, &mut nodes);
         if nodes.is_empty() {
             return (Vec::new(), 0.0);
         }
@@ -1209,21 +1338,234 @@ impl Layouter<'_> {
         }
     }
 
-    /// Collects the flex items of a container, flattening document fragments.
+    /// Lays out the children of a grid container and returns `(children, used height)`.
+    ///
+    /// Items are placed row-major into the column template: item `i` sits in row
+    /// `i / columns` and column `i % columns`. The columns are sized first (fixed,
+    /// percentage, `auto` and `fr` tracks, with the gap), then every item is laid out once
+    /// at the container's content origin, then the rows are sized (`grid-auto-rows` or
+    /// the tallest item of the row) and each item's subtree is translated into its cell.
+    /// There is no second layout pass: block content does not depend on its box height, so
+    /// the row stretch can patch the used height afterwards.
+    ///
+    /// An empty or unsupported template is one implicit column that fills the container
+    /// width. Rows are always implicit: there is no `grid-template-rows`, no explicit
+    /// placement, no spans and no dense packing, and `order` is not applied to grid items.
+    fn layout_grid_content(
+        &mut self,
+        node: NodeId,
+        containing: ContainingBlock,
+        top: f32,
+    ) -> (Vec<usize>, f32) {
+        let gap = finite_non_negative(self.styles.gap(node));
+        let tracks = self.styles.grid_template_columns(node);
+        let auto_rows = self.styles.grid_auto_rows(node);
+
+        let mut nodes = Vec::new();
+        self.collect_box_items(node, &mut nodes);
+        if nodes.is_empty() {
+            return (Vec::new(), 0.0);
+        }
+
+        let columns = tracks.len().max(1);
+        let mut items = self.measure_grid_items(&nodes, containing);
+        let widths = grid_track_widths(&items, &tracks, columns, containing.width, gap);
+        // Each item gets its cell's width, minus its own box decorations. A declared
+        // width wins; such an item is start-aligned in its cell because there is no
+        // `justify-items` yet.
+        for (index, item) in items.iter_mut().enumerate() {
+            let cell = widths[index % columns];
+            item.content_width = if item.width_declared {
+                item.base_width
+            } else {
+                finite_non_negative(
+                    cell - item.margin.horizontal()
+                        - item.padding.horizontal()
+                        - item.border.horizontal(),
+                )
+            };
+        }
+        self.layout_grid_items(&mut items, &nodes, containing, top);
+
+        let rows = items.len().div_ceil(columns);
+        let mut row_heights: Vec<f32> = vec![0.0; rows];
+        for (index, item) in items.iter().enumerate() {
+            let row = index / columns;
+            row_heights[row] = row_heights[row].max(item.outer_height());
+        }
+        if let GridAutoRows::Px(px) = auto_rows {
+            row_heights.fill(finite_non_negative(px));
+        }
+
+        let mut column_x = Vec::with_capacity(columns);
+        let mut x = containing.x;
+        for width in &widths {
+            column_x.push(x);
+            x += width + gap;
+        }
+        let mut row_y = Vec::with_capacity(rows);
+        let mut y = top;
+        for height in &row_heights {
+            row_y.push(y);
+            y += height + gap;
+        }
+        let used_height = row_heights.iter().sum::<f32>() + gap * rows.saturating_sub(1) as f32;
+
+        let mut children = Vec::with_capacity(items.len());
+        for (index, item) in items.iter_mut().enumerate() {
+            let column = index % columns;
+            let row = index / columns;
+            if !item.height_declared {
+                // The row is the cell's cross size, so the item fills it.
+                let forced = finite_non_negative(
+                    row_heights[row]
+                        - item.margin.vertical()
+                        - item.padding.vertical()
+                        - item.border.vertical(),
+                );
+                item.forced_height = Some(forced);
+                item.border_height = forced + item.padding.vertical() + item.border.vertical();
+            }
+            if let Some(forced) = item.forced_height {
+                let boxed = &mut self.boxes[item.start];
+                let rect = boxed.rect;
+                let content = boxed.content;
+                let border_height = forced + item.padding.vertical() + item.border.vertical();
+                boxed.rect = Rect::new(rect.origin.x, rect.origin.y, rect.size.w, border_height);
+                boxed.content =
+                    Rect::new(content.origin.x, content.origin.y, content.size.w, forced);
+            }
+            let planned_x = column_x[column] + item.margin.left;
+            let planned_y = row_y[row] + item.margin.top;
+            self.translate_subtree(
+                item.start..item.end,
+                planned_x - (containing.x + item.margin.left),
+                planned_y - top,
+            );
+            children.push(item.start);
+        }
+        (children, used_height)
+    }
+
+    /// Resolves the base width of every grid item before the columns are sized.
+    ///
+    /// Nothing is laid out here: the base widths decide an `auto` track's size and the
+    /// width of an item that declares one, and the boxes are built afterwards, once the
+    /// final cell width is known.
+    fn measure_grid_items(
+        &mut self,
+        nodes: &[FlexNode],
+        containing: ContainingBlock,
+    ) -> Vec<GridItem> {
+        let mut items = Vec::with_capacity(nodes.len());
+        for flex_node in nodes {
+            let anonymous = flex_node.anonymous_text;
+            let (margin, padding, border) = if anonymous {
+                (Edges::ZERO, Edges::ZERO, Edges::ZERO)
+            } else {
+                (
+                    self.styles
+                        .margin(flex_node.node)
+                        .resolve(Some(containing.width))
+                        .clamped(),
+                    self.styles
+                        .padding(flex_node.node)
+                        .resolve(Some(containing.width))
+                        .clamped(),
+                    self.styles.border(flex_node.node).clamped(),
+                )
+            };
+            let declared_width = if anonymous {
+                None
+            } else {
+                self.styles
+                    .width(flex_node.node)
+                    .resolve(Some(containing.width))
+            };
+            let declared_height = if anonymous {
+                None
+            } else {
+                self.styles.height(flex_node.node).resolve(None)
+            };
+            let base_width =
+                declared_width.unwrap_or_else(|| self.max_content_width(flex_node.node, anonymous));
+            items.push(GridItem {
+                anonymous_text: anonymous,
+                margin,
+                padding,
+                border,
+                base_width,
+                width_declared: declared_width.is_some(),
+                content_width: base_width,
+                border_height: 0.0,
+                start: 0,
+                end: 0,
+                height_declared: declared_height.is_some(),
+                forced_height: None,
+            });
+        }
+        items
+    }
+
+    /// Lays out every grid item at the container's content origin.
+    ///
+    /// The positions are provisional; the cell placement translates each subtree
+    /// afterwards. Items are laid out in placement order, so the child indices stay in
+    /// paint order.
+    fn layout_grid_items(
+        &mut self,
+        items: &mut [GridItem],
+        nodes: &[FlexNode],
+        containing: ContainingBlock,
+        top: f32,
+    ) {
+        for (item, flex_node) in items.iter_mut().zip(nodes) {
+            let start = self.boxes.len();
+            let metrics = if item.anonymous_text {
+                self.layout_text_item(
+                    flex_node.node,
+                    ContainingBlock {
+                        x: containing.x,
+                        width: item.content_width,
+                    },
+                    top,
+                )
+            } else {
+                self.layout_block_box(
+                    flex_node.node,
+                    BlockBox {
+                        border_x: containing.x + item.margin.left,
+                        y: top,
+                        border_box_width: item.content_width
+                            + item.padding.horizontal()
+                            + item.border.horizontal(),
+                        padding: item.padding,
+                        border: item.border,
+                        forced_content_height: None,
+                    },
+                )
+            };
+            item.start = start;
+            item.end = self.boxes.len();
+            item.border_height = metrics.border_height;
+        }
+    }
+
+    /// Collects the items of a flex or grid container, flattening document fragments.
     ///
     /// Every element that is not `display: none` is an item — including an inline
-    /// element, which a flex container blockifies — and every bare text node becomes its
-    /// own anonymous item. Comments are skipped, and so is whitespace-only text: CSS
-    /// drops it, and HTML authors put it between elements on purpose; keeping it would
-    /// add a zero-width item and an extra gap between the real ones.
-    fn collect_flex_items(&self, node: NodeId, items: &mut Vec<FlexNode>) {
+    /// element, which a flex or grid container blockifies — and every bare text node
+    /// becomes its own anonymous item. Comments are skipped, and so is whitespace-only
+    /// text: CSS drops it, and HTML authors put it between elements on purpose; keeping it
+    /// would add a zero-width item and an extra gap between the real ones.
+    fn collect_box_items(&self, node: NodeId, items: &mut Vec<FlexNode>) {
         for child in self.document.children(node) {
-            self.collect_flex_item(child, items);
+            self.collect_box_item(child, items);
         }
     }
 
     /// Appends one child's contribution to the flex item list.
-    fn collect_flex_item(&self, node: NodeId, items: &mut Vec<FlexNode>) {
+    fn collect_box_item(&self, node: NodeId, items: &mut Vec<FlexNode>) {
         match self.document.kind(node) {
             NodeKind::Text(content) => {
                 if content
@@ -1241,7 +1583,7 @@ impl Layouter<'_> {
             // hand-built document can nest one; hoist its children as items.
             NodeKind::Document => {
                 for child in self.document.children(node) {
-                    self.collect_flex_item(child, items);
+                    self.collect_box_item(child, items);
                 }
             }
             NodeKind::Element(_) => {
@@ -1401,7 +1743,7 @@ impl Layouter<'_> {
             }
             NodeKind::Element(_) => match self.styles.display(node) {
                 Display::None => {}
-                Display::Block | Display::Flex => items.push(Flow::Block(node)),
+                Display::Block | Display::Flex | Display::Grid => items.push(Flow::Block(node)),
                 Display::Inline => {
                     let mut nested = inline.to_vec();
                     nested.push(node);
@@ -2016,5 +2358,72 @@ mod tests {
             align_content_offsets(AlignContent::SpaceBetween, 50.0, 1),
             (0.0, 0.0, 0.0)
         );
+    }
+
+    /// A grid item with no decorations and a fixed base width, for the pure track sizing.
+    fn plain_grid_item(base_width: f32) -> GridItem {
+        GridItem {
+            anonymous_text: false,
+            margin: Edges::ZERO,
+            padding: Edges::ZERO,
+            border: Edges::ZERO,
+            base_width,
+            width_declared: false,
+            content_width: base_width,
+            border_height: 10.0,
+            start: 0,
+            end: 0,
+            height_declared: true,
+            forced_height: None,
+        }
+    }
+
+    #[test]
+    fn grid_track_widths_size_fixed_auto_and_fr_tracks() {
+        let items = vec![plain_grid_item(40.0), plain_grid_item(10.0)];
+        // The empty template is one implicit column that fills the container.
+        assert_eq!(grid_track_widths(&items, &[], 1, 100.0, 0.0), vec![100.0]);
+        // `auto` takes the widest item of its column; `fr` takes the rest.
+        assert_eq!(
+            grid_track_widths(
+                &items,
+                &[GridTrack::Auto, GridTrack::Fr(1.0)],
+                2,
+                100.0,
+                0.0
+            ),
+            vec![40.0, 60.0]
+        );
+        // Percentage tracks resolve against the container width.
+        assert_eq!(
+            grid_track_widths(
+                &items,
+                &[GridTrack::Percent(50.0), GridTrack::Percent(25.0)],
+                2,
+                400.0,
+                0.0
+            ),
+            vec![200.0, 100.0]
+        );
+        // Fixed tracks that already overrun the container leave the `fr` track at zero.
+        let widths = grid_track_widths(
+            &items,
+            &[GridTrack::Px(120.0), GridTrack::Fr(1.0)],
+            2,
+            100.0,
+            0.0,
+        );
+        assert_eq!(widths[0], 120.0);
+        assert_eq!(widths[1], 0.0);
+        // Gaps come out before the `fr` tracks share the rest.
+        let widths = grid_track_widths(
+            &items,
+            &[GridTrack::Px(40.0), GridTrack::Fr(1.0)],
+            2,
+            100.0,
+            10.0,
+        );
+        assert_eq!(widths[0], 40.0);
+        assert_eq!(widths[1], 50.0);
     }
 }

@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Grid</title>
+    <style>
+      body { margin: 16px; font-family: "Helvetica"; color: #111827; }
+      h1 { font-size: 22px; margin: 0 0 10px 0; color: #1d4ed8; }
+      h2 { font-size: 16px; margin: 14px 0 6px 0; }
+      .fixed { display: grid; grid-template-columns: 140px 1fr 2fr; gap: 10px; margin-bottom: 8px; }
+      .cell { background-color: #eef2ff; border: 1px solid #6366f1; padding: 6px; }
+      .mixed { display: grid; grid-template-columns: 120px 25% auto; gap: 8px; grid-auto-rows: 48px; }
+      .tile { background-color: #dcfce7; padding: 6px; }
+    </style>
+  </head>
+  <body>
+    <h1>Grid</h1>
+    <h2>Fixed, 1fr and 2fr</h2>
+    <div class="fixed">
+      <div class="cell">A</div>
+      <div class="cell">B</div>
+      <div class="cell">C</div>
+      <div class="cell">D</div>
+      <div class="cell">E</div>
+      <div class="cell">F</div>
+    </div>
+    <h2>Percent, auto and auto rows</h2>
+    <div class="mixed">
+      <div class="tile">one</div>
+      <div class="tile">two</div>
+      <div class="tile">three</div>
+      <div class="tile">four</div>
+      <div class="tile">five</div>
+      <div class="tile">six</div>
+    </div>
+  </body>
+</html>

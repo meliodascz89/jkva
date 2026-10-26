@@ -8,7 +8,7 @@
 
 JKva is an early-stage browser engine: its own DOM, style system, layout engine, rasterizer, compositor and event loop — no inherited twenty-year-old C++ layer, no Chromium fork.
 
-**Status: M2 — flexbox (subset), gaming platform started.** HTML parses through html5ever, CSS is parsed and cascaded, block, inline and flex layout run in `jkva-layout`, text is shaped and rasterized, and Metal presents the frame. `examples/hello.html`, `cards.html` and `flex.html` render in the screenshot corpus with goldens. Flex supports row/column, `justify-content`, `align-items`, `align-self`, `gap`, `flex-wrap`, `flex-grow`, `flex-shrink`, `flex-basis`, `order` and `align-content`. Gaming is a first-class 0.1 goal ([ADR-026](briefing/DECISIONS.md)): the permission-gated UDP transport is in `jkva-net` (default deny, per-application and per-origin grants), and the GPU performance probe is next.
+**Status: M2 — flexbox (subset), gaming platform started.** HTML parses through html5ever, CSS is parsed and cascaded, block, inline and flex layout run in `jkva-layout`, text is shaped and rasterized, and Metal presents the frame. `examples/hello.html`, `cards.html` and `flex.html` render in the screenshot corpus with goldens. Flex supports row/column, `justify-content`, `align-items`, `align-self`, `gap`, `flex-wrap`, `flex-grow`, `flex-shrink`, `flex-basis`, `order` and `align-content`, plus a first grid (`grid-template-columns` with px/fr/auto/%, `grid-auto-rows`, gap). Gaming is a first-class 0.1 goal ([ADR-026](briefing/DECISIONS.md)): the permission-gated UDP transport is in `jkva-net` (default deny, per-application and per-origin grants), and the GPU performance probe is next.
 
 ![The first page rendered by JKva](docs/images/first-page.png)
 
@@ -18,7 +18,7 @@ JKva is an early-stage browser engine: its own DOM, style system, layout engine,
 
 - **M0 complete** — repository, CI, EN+CS documentation, 24 ADRs, Metal walking skeleton, IPC contracts (`jkva-ipc`), and the harness: reftest diff, corpus runner, WPT report, WPT reftests, benchmarks.
 - **M1 complete** — HTML → DOM → CSS cascade → block, inline and flex layout → shaped text → Metal → PNG; three golden pages; damage tracking seam; WPT reftest runner with published caveats.
-- **M2 in progress** — flexbox: `row`/`column`, `justify-content`, `align-items`, `align-self`, `gap`, `wrap`, `grow`/`shrink`/`basis`. Next: grid. Gaming: ADR-026, permission-gated UDP, frame pacing, GPU capability report and the first frame-time baseline (CPU submit p95 0.15 ms, GPU execution p95 1.22 ms on a 4096-draw scene) and the engine frame after glyph/font/shaping caches (p50 about 0.51 ms) done.
+- **M2 in progress** — flexbox: `row`/`column`, `justify-content`, `align-items`, `align-self`, `gap`, `wrap`, `grow`/`shrink`/`basis`. Next: grid refinements (explicit placement, spans), tables, floats, images. Gaming: ADR-026, permission-gated UDP, frame pacing, GPU capability report and the first frame-time baseline (CPU submit p95 0.15 ms, GPU execution p95 1.22 ms on a 4096-draw scene) and the engine frame after glyph/font/shaping caches (p50 about 0.51 ms) done.
 - 57 test suites green, CI green, ~1.94 ms cascade on the 602-node fixture.
 
 The checkable list, with evidence and known gaps, is [`docs/src/en/status.md`](docs/src/en/status.md) ([Czech](docs/src/cs/status.md)).

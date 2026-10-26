@@ -46,6 +46,7 @@ What is done, what is verified, and what is deliberately not done yet. Every lin
 | Corpus page with a golden | done | `examples/flex.html`, `examples/expected/flex.png` |
 | Wrap, `flex-grow`/`shrink`/`basis` | done | row wrapping, grow/shrink distribution, basis, percentage basis |
 | `order` and `align-content` | done | stable order sort; six align-content modes for multi-line rows |
+| Grid (subset) | done | `grid-template-columns` with px/fr/auto/%, `grid-auto-rows`, gap, row-major placement |
 | Column wrap, `align-content` on columns, intrinsic min/max | not yet | next M2 increment |
 | Grid, tables, floats, images, scroll, hit testing, layers | not yet | M2 |
 

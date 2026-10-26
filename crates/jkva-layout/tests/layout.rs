@@ -11,14 +11,15 @@ use std::collections::HashMap;
 
 use jkva_dom::{Document, NodeId, parse_document};
 use jkva_layout::{
-    AlignContent, AlignItems, Display, Edges, FlexDirection, FlexWrap, JustifyContent, LayoutBox,
-    LayoutTree, Length, LengthEdges, Rect, StyleSource, TextMeasure, TextRun, Viewport, layout,
+    AlignContent, AlignItems, Display, Edges, FlexDirection, FlexWrap, GridAutoRows, GridTrack,
+    JustifyContent, LayoutBox, LayoutTree, Length, LengthEdges, Rect, StyleSource, TextMeasure,
+    TextRun, Viewport, layout,
 };
 
 const BLACK: [u8; 4] = [0, 0, 0, 255];
 
 /// The style of one node as the mock reports it.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 struct NodeStyle {
     display: Display,
     width: Option<f32>,
@@ -40,6 +41,8 @@ struct NodeStyle {
     flex_basis: Length,
     order: i32,
     align_content: AlignContent,
+    grid_template_columns: Vec<GridTrack>,
+    grid_auto_rows: GridAutoRows,
 }
 
 impl NodeStyle {
@@ -65,6 +68,8 @@ impl NodeStyle {
         flex_basis: Length::Auto,
         order: 0,
         align_content: AlignContent::Stretch,
+        grid_template_columns: Vec::new(),
+        grid_auto_rows: GridAutoRows::Auto,
     };
 
     /// An inline element: flattened by layout, so only text properties matter.
@@ -184,6 +189,24 @@ impl NodeStyle {
         self.align_content = align_content;
         self
     }
+
+    /// A block-level grid container.
+    fn grid() -> Self {
+        Self {
+            display: Display::Grid,
+            ..Self::BLOCK
+        }
+    }
+
+    fn with_columns(mut self, columns: Vec<GridTrack>) -> Self {
+        self.grid_template_columns = columns;
+        self
+    }
+
+    fn with_auto_rows(mut self, auto_rows: GridAutoRows) -> Self {
+        self.grid_auto_rows = auto_rows;
+        self
+    }
 }
 
 /// A style source whose answers are a map, with a block default.
@@ -202,7 +225,10 @@ impl MockStyles {
     }
 
     fn get(&self, node: NodeId) -> NodeStyle {
-        self.nodes.get(&node).copied().unwrap_or(NodeStyle::BLOCK)
+        self.nodes
+            .get(&node)
+            .cloned()
+            .unwrap_or_else(|| NodeStyle::BLOCK.clone())
     }
 }
 
@@ -285,6 +311,14 @@ impl StyleSource for MockStyles {
 
     fn align_content(&self, node: NodeId) -> AlignContent {
         self.get(node).align_content
+    }
+
+    fn grid_template_columns(&self, node: NodeId) -> Vec<GridTrack> {
+        self.get(node).grid_template_columns.clone()
+    }
+
+    fn grid_auto_rows(&self, node: NodeId) -> GridAutoRows {
+        self.get(node).grid_auto_rows
     }
 }
 
@@ -1843,4 +1877,293 @@ fn align_content_is_ignored_for_a_single_line() {
     // A single line keeps the definite cross size and stays at the top.
     assert_positions(ys(&tree, &[first, second]), &[0.0, 0.0]);
     assert_close(box_of(&tree, container).content.height(), 100.0);
+}
+
+// ---------------------------------------------------------------------------
+// Grid
+// ---------------------------------------------------------------------------
+
+#[test]
+fn three_fixed_columns_have_exact_x_positions() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let items: Vec<NodeId> = (0..3)
+        .map(|_| element(&mut document, container, "div"))
+        .collect();
+    let mut styles = MockStyles::new();
+    styles.set(
+        container,
+        NodeStyle::grid().with_columns(vec![
+            GridTrack::Px(60.0),
+            GridTrack::Px(60.0),
+            GridTrack::Px(60.0),
+        ]),
+    );
+    for item in &items {
+        styles.set(*item, NodeStyle::BLOCK.with_height(10.0));
+    }
+    let tree = layout_with(&document, &styles, 300.0, 600.0);
+
+    assert_positions(xs(&tree, &items), &[0.0, 60.0, 120.0]);
+    assert_positions(ys(&tree, &items), &[0.0, 0.0, 0.0]);
+    for item in &items {
+        assert_close(box_of(&tree, *item).rect.width(), 60.0);
+    }
+    assert_close(box_of(&tree, container).content.height(), 10.0);
+}
+
+#[test]
+fn fr_tracks_share_the_remaining_width_by_factor() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let items: Vec<NodeId> = (0..3)
+        .map(|_| element(&mut document, container, "div"))
+        .collect();
+    let mut styles = MockStyles::new();
+    styles.set(
+        container,
+        NodeStyle::grid().with_columns(vec![
+            GridTrack::Px(60.0),
+            GridTrack::Fr(1.0),
+            GridTrack::Fr(2.0),
+        ]),
+    );
+    for item in &items {
+        styles.set(*item, NodeStyle::BLOCK.with_height(10.0));
+    }
+    let tree = layout_with(&document, &styles, 300.0, 600.0);
+
+    // 300 - 60 = 240 shared 1:2.
+    assert_positions(xs(&tree, &items), &[0.0, 60.0, 140.0]);
+    assert_close(box_of(&tree, items[0]).rect.width(), 60.0);
+    assert_close(box_of(&tree, items[1]).rect.width(), 80.0);
+    assert_close(box_of(&tree, items[2]).rect.width(), 160.0);
+}
+
+#[test]
+fn an_auto_column_is_sized_by_its_widest_item() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let text_item = element(&mut document, container, "div");
+    text(&mut document, text_item, "Hello");
+    let second = element(&mut document, container, "div");
+    let mut styles = MockStyles::new();
+    styles.set(
+        container,
+        NodeStyle::grid().with_columns(vec![GridTrack::Auto, GridTrack::Px(50.0)]),
+    );
+    let tree = layout_with(&document, &styles, 300.0, 600.0);
+
+    // "Hello" is 5 * 8px, so the auto track is 40px wide.
+    assert_close(box_of(&tree, text_item).rect.width(), 40.0);
+    assert_positions(xs(&tree, &[text_item, second]), &[0.0, 40.0]);
+    assert_close(box_of(&tree, second).rect.width(), 50.0);
+    assert_close(box_of(&tree, container).content.height(), 19.2);
+}
+
+#[test]
+fn a_percentage_track_resolves_against_the_container_width() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let first = element(&mut document, container, "div");
+    let second = element(&mut document, container, "div");
+    let mut styles = MockStyles::new();
+    styles.set(
+        container,
+        NodeStyle::grid().with_columns(vec![GridTrack::Percent(25.0), GridTrack::Percent(50.0)]),
+    );
+    styles.set(first, NodeStyle::BLOCK.with_height(10.0));
+    styles.set(second, NodeStyle::BLOCK.with_height(10.0));
+    let tree = layout_with(&document, &styles, 400.0, 600.0);
+
+    assert_close(box_of(&tree, first).rect.width(), 100.0);
+    assert_close(box_of(&tree, second).rect.width(), 200.0);
+    assert_positions(xs(&tree, &[first, second]), &[0.0, 100.0]);
+}
+
+#[test]
+fn row_heights_come_from_the_tallest_item() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let short = element(&mut document, container, "div");
+    let tall = element(&mut document, container, "div");
+    let next_row = element(&mut document, container, "div");
+    let mut styles = MockStyles::new();
+    styles.set(
+        container,
+        NodeStyle::grid().with_columns(vec![GridTrack::Px(50.0), GridTrack::Px(50.0)]),
+    );
+    styles.set(short, NodeStyle::BLOCK.with_height(10.0));
+    styles.set(tall, NodeStyle::BLOCK.with_height(30.0));
+    styles.set(next_row, NodeStyle::BLOCK.with_height(10.0));
+    let tree = layout_with(&document, &styles, 100.0, 600.0);
+
+    // Row 0 is 30px tall because of `tall`, row 1 is 10px.
+    assert_positions(ys(&tree, &[short, tall, next_row]), &[0.0, 0.0, 30.0]);
+    assert_close(box_of(&tree, short).rect.height(), 10.0);
+    assert_close(box_of(&tree, container).content.height(), 40.0);
+}
+
+#[test]
+fn the_gap_separates_rows_and_columns() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let items: Vec<NodeId> = (0..4)
+        .map(|_| element(&mut document, container, "div"))
+        .collect();
+    let mut styles = MockStyles::new();
+    styles.set(
+        container,
+        NodeStyle::grid()
+            .with_columns(vec![GridTrack::Px(40.0), GridTrack::Px(40.0)])
+            .with_gap(10.0),
+    );
+    for item in &items {
+        styles.set(*item, NodeStyle::BLOCK.with_height(10.0));
+    }
+    let tree = layout_with(&document, &styles, 100.0, 600.0);
+
+    assert_positions(xs(&tree, &items), &[0.0, 50.0, 0.0, 50.0]);
+    assert_positions(ys(&tree, &items), &[0.0, 0.0, 20.0, 20.0]);
+    // Two 10px rows plus the 10px row gap.
+    assert_close(box_of(&tree, container).content.height(), 30.0);
+}
+
+#[test]
+fn grid_items_stretch_to_the_cell_unless_they_declare_a_width() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let stretched = element(&mut document, container, "div");
+    let narrow = element(&mut document, container, "div");
+    let mut styles = MockStyles::new();
+    styles.set(
+        container,
+        NodeStyle::grid().with_columns(vec![GridTrack::Px(100.0), GridTrack::Px(100.0)]),
+    );
+    styles.set(stretched, NodeStyle::BLOCK.with_height(10.0));
+    styles.set(narrow, NodeStyle::BLOCK.with_width(40.0).with_height(10.0));
+    let tree = layout_with(&document, &styles, 300.0, 600.0);
+
+    assert_close(box_of(&tree, stretched).rect.width(), 100.0);
+    assert_close(box_of(&tree, narrow).rect.width(), 40.0);
+    // The narrower item stays at the start of its cell.
+    assert_positions(xs(&tree, &[stretched, narrow]), &[0.0, 100.0]);
+}
+
+#[test]
+fn an_empty_grid_has_no_children() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let mut styles = MockStyles::new();
+    styles.set(
+        container,
+        NodeStyle::grid().with_columns(vec![GridTrack::Px(50.0)]),
+    );
+    let tree = layout_with(&document, &styles, 300.0, 600.0);
+
+    let boxed = box_of(&tree, container);
+    assert!(boxed.children.is_empty());
+    assert_close(boxed.content.height(), 0.0);
+}
+
+#[test]
+fn a_single_item_occupies_the_first_cell() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let item = element(&mut document, container, "div");
+    let mut styles = MockStyles::new();
+    styles.set(
+        container,
+        NodeStyle::grid().with_columns(vec![GridTrack::Px(50.0)]),
+    );
+    styles.set(item, NodeStyle::BLOCK.with_height(10.0));
+    let tree = layout_with(&document, &styles, 300.0, 600.0);
+
+    assert_positions(xs(&tree, &[item]), &[0.0]);
+    assert_close(box_of(&tree, item).rect.width(), 50.0);
+    assert_close(box_of(&tree, container).content.height(), 10.0);
+}
+
+#[test]
+fn a_grid_can_be_a_grid_item() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let outer = element(&mut document, body, "div");
+    let inner = element(&mut document, outer, "div");
+    let first = element(&mut document, inner, "div");
+    let second = element(&mut document, inner, "div");
+    let mut styles = MockStyles::new();
+    styles.set(
+        outer,
+        NodeStyle::grid().with_columns(vec![GridTrack::Px(200.0)]),
+    );
+    styles.set(
+        inner,
+        NodeStyle::grid().with_columns(vec![GridTrack::Px(50.0), GridTrack::Px(50.0)]),
+    );
+    styles.set(first, NodeStyle::BLOCK.with_height(10.0));
+    styles.set(second, NodeStyle::BLOCK.with_height(10.0));
+    let tree = layout_with(&document, &styles, 300.0, 600.0);
+
+    let inner_box = box_of(&tree, inner);
+    assert_close(inner_box.rect.width(), 200.0);
+    assert_close(inner_box.content.height(), 10.0);
+    assert_positions(xs(&tree, &[first, second]), &[0.0, 50.0]);
+    assert_close(box_of(&tree, outer).content.height(), 10.0);
+}
+
+#[test]
+fn more_columns_than_items_leaves_empty_cells() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let item = element(&mut document, container, "div");
+    let mut styles = MockStyles::new();
+    styles.set(
+        container,
+        NodeStyle::grid().with_columns(vec![
+            GridTrack::Px(30.0),
+            GridTrack::Px(30.0),
+            GridTrack::Px(30.0),
+        ]),
+    );
+    styles.set(item, NodeStyle::BLOCK.with_height(10.0));
+    let tree = layout_with(&document, &styles, 300.0, 600.0);
+
+    assert_eq!(box_of(&tree, container).children.len(), 1);
+    assert_positions(xs(&tree, &[item]), &[0.0]);
+    assert_close(box_of(&tree, item).rect.width(), 30.0);
+    assert_close(box_of(&tree, container).content.height(), 10.0);
+}
+
+#[test]
+fn grid_auto_rows_px_sets_the_row_height() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let first = element(&mut document, container, "div");
+    let second = element(&mut document, container, "div");
+    let mut styles = MockStyles::new();
+    styles.set(
+        container,
+        NodeStyle::grid()
+            .with_columns(vec![GridTrack::Px(50.0)])
+            .with_auto_rows(GridAutoRows::Px(40.0)),
+    );
+    let tree = layout_with(&document, &styles, 100.0, 600.0);
+
+    assert_positions(ys(&tree, &[first, second]), &[0.0, 40.0]);
+    // Items without a declared height fill the row.
+    assert_close(box_of(&tree, first).rect.height(), 40.0);
+    assert_close(box_of(&tree, second).rect.height(), 40.0);
+    assert_close(box_of(&tree, container).content.height(), 80.0);
 }
