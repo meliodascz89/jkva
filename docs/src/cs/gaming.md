@@ -67,6 +67,17 @@ Capabilities: Apple M4, `maxBufferLength` 13 639,7 MiB, doporučený working set
 
 Rozsah: layout a styly jsou statické (postavené jednou), měřený frame znovu staví scénu — pozadí, rámečky, shaping a rasterizaci glyfů — nahraje ji a čeká na GPU, bez readbacku na CPU. Po cache glyfových textur, fontů a shaped runů spadl stejný frame z 8,05 na zhruba 0,51 ms p50 (z 10,81 na 2,46 ms p95, medián pěti běhů); pořád je to statická stránka, ne herní scéna, a zatím to není srovnatelné s Chrome.
 
+### Herní frame (animované sprity, damage)
+
+`cargo run --release -p engine-bench -- --game --sprites 2000 --frames 120 --width 800 --height 600 --mode incremental|full`
+
+| Režim | p50 | p95 | Průměrně kreslených itemů |
+|---|---:|---:|---:|
+| Damage (inkrementální) | 0,284 ms | 2,16 ms | 215 |
+| Plný překres | 0,544 ms | 2,45 ms | 2000 |
+
+2000 spritů, 100 se pohybuje, 800×600, medián pěti běhů. Damage rendering drží target mezi framy, načítá ho místo clearu a kreslí jen itemy protínající damage rectangles — 9,3× méně draw callů a zhruba 1,9× lepší p50. p95 je dané fillem GPU a téměř se nemění, což je poctivý limit této cesty, dokud nebude skutečný kompositor s vrstvami. V loopu pořád není JS, WASM ani layout.
+
 ## Stav
 
 Design je v ADR-026. Hotové: permission-gated UDP transport v `jkva-net` (Tokio, default deny, grant/revoke, kvóty) a fixed-timestep `FrameClock` v `jkva-core` (cap na kroky, interpolační alpha, změna rate). Rozpracované: GPU capability probe a frame-time harness v `jkva-gfx`. Gamepad vstup je typovaná zpráva v `jkva-ipc` protokolu v2.

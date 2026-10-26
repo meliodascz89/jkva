@@ -67,6 +67,17 @@ Capabilities: Apple M4, `maxBufferLength` 13,639.7 MiB, recommended working set 
 
 Scope: layout and style are static (built once), the measured frame rebuilds the scene — backgrounds, borders, glyph shaping and rasterization — uploads it and waits for the GPU, with no CPU readback. After glyph-texture, font and shaped-run caches the same frame dropped from 8.05 to about 0.51 ms p50 (10.81 to 2.46 ms p95, median of five runs); it is still a static page, not a game scene, and not yet comparable to Chrome.
 
+### Game frame (animated sprites, damage)
+
+`cargo run --release -p engine-bench -- --game --sprites 2000 --frames 120 --width 800 --height 600 --mode incremental|full`
+
+| Mode | p50 | p95 | Average drawn items |
+|---|---:|---:|---:|
+| Damage (incremental) | 0.284 ms | 2.16 ms | 215 |
+| Full redraw | 0.544 ms | 2.45 ms | 2000 |
+
+2000 sprites, 100 of them moving, 800×600, median of five runs. Damage rendering keeps the target between frames, loads it instead of clearing, and draws only the items intersecting the damage rectangles — 9.3x fewer draws and about 1.9x better p50. The p95 is dominated by GPU fill and is nearly unchanged, which is the honest limit of this path until a real compositor with layers exists. There is still no JS, WASM or layout in this loop.
+
 ## Status
 
 The design is in ADR-026. Done: the permission-gated UDP transport in `jkva-net` (Tokio, default deny, grant/revoke, quotas) and the fixed-timestep `FrameClock` in `jkva-core` (capped simulation steps, interpolation alpha, rate changes). In progress: the GPU capability probe and frame-time harness in `jkva-gfx`. Gamepad input is a typed message in `jkva-ipc` protocol v2.

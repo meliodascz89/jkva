@@ -21,7 +21,8 @@ use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
 use objc2_foundation::NSString;
 
-use jkva_paint::{DisplayItem, DisplayList, Rect};
+pub use jkva_paint::Rect;
+use jkva_paint::{DisplayItem, DisplayList};
 use objc2_metal::{
     MTLBlendFactor, MTLClearColor, MTLCommandBuffer, MTLCommandEncoder, MTLCommandQueue,
     MTLCounterSamplingPoint, MTLCounterSet, MTLCreateSystemDefaultDevice, MTLDevice, MTLGPUFamily,
@@ -683,6 +684,8 @@ pub struct SceneRenderer {
     sampler: Retained<ProtocolObject<dyn MTLSamplerState>>,
     white: Retained<ProtocolObject<dyn MTLTexture>>,
     textures: std::collections::HashMap<u64, Retained<ProtocolObject<dyn MTLTexture>>>,
+    frame_target: Option<(u32, u32, Target)>,
+    drawn_items: usize,
 }
 
 impl SceneRenderer {
@@ -723,6 +726,8 @@ impl SceneRenderer {
             sampler,
             white,
             textures: std::collections::HashMap::new(),
+            frame_target: None,
+            drawn_items: 0,
         })
     }
 
@@ -767,71 +772,154 @@ impl SceneRenderer {
         self.draw(width, height, scene).map(|_| ())
     }
 
+    /// Number of items drawn by the most recent frame (diagnostics).
+    #[must_use]
+    pub fn last_drawn_items(&self) -> usize {
+        self.drawn_items
+    }
+
     fn draw(&mut self, width: u32, height: u32, scene: &Scene) -> Result<Target, String> {
         if width == 0 || height == 0 {
             return Err("image dimensions must be non-zero".into());
         }
         let target = new_target(&self.device, width, height, [1.0, 1.0, 1.0, 1.0])?;
+        self.frame_target = None;
         let mut vertices: Vec<SceneVertex> = Vec::new();
         let mut draws: Vec<SceneDraw> = Vec::new();
         for item in &scene.items {
-            let start = vertices.len();
-            let (rect, texture, tint) = match item {
-                SceneItem::Rect { rect, color } => (*rect, self.white.clone(), *color),
-                SceneItem::Image {
-                    rect,
-                    texture,
-                    tint,
-                } => (*rect, make_texture(&self.device, texture)?, *tint),
-                SceneItem::CachedImage { rect, key, tint } => (
-                    *rect,
-                    self.textures
-                        .get(key)
-                        .cloned()
-                        .ok_or_else(|| format!("no cached texture under key {key}"))?,
-                    *tint,
-                ),
-            };
-            let to_ndc = |x: f32, y: f32| -> [f32; 2] {
-                [x / width as f32 * 2.0 - 1.0, 1.0 - y / height as f32 * 2.0]
-            };
-            let (x0, y0, x1, y1) = (rect.min_x(), rect.min_y(), rect.max_x(), rect.max_y());
-            let c = [
-                f32::from(tint[0]) / 255.0,
-                f32::from(tint[1]) / 255.0,
-                f32::from(tint[2]) / 255.0,
-                f32::from(tint[3]) / 255.0,
-            ];
-            let p0 = SceneVertex {
-                position: to_ndc(x0, y0),
-                uv: [0.0, 0.0],
-                color: c,
-            };
-            let p1 = SceneVertex {
-                position: to_ndc(x1, y0),
-                uv: [1.0, 0.0],
-                color: c,
-            };
-            let p2 = SceneVertex {
-                position: to_ndc(x1, y1),
-                uv: [1.0, 1.0],
-                color: c,
-            };
-            let p3 = SceneVertex {
-                position: to_ndc(x0, y1),
-                uv: [0.0, 1.0],
-                color: c,
-            };
-            vertices.extend_from_slice(&[p0, p1, p2, p0, p2, p3]);
-            draws.push((texture, start, 6));
+            draws.push(self.append_item(item, width, height, &mut vertices)?);
         }
+        self.drawn_items = draws.len();
+        self.encode_draws(&target, &vertices, &draws, true)?;
+        Ok(target)
+    }
 
+    /// Draws only the items intersecting `damage` on top of the previous frame.
+    ///
+    /// The render target is kept between calls, so the pass loads its previous
+    /// contents instead of clearing them. The first call for a size (or after a
+    /// full [`SceneRenderer::submit`]) renders everything, because there is no
+    /// previous frame to preserve. Returns the number of items drawn.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for zero dimensions, a missing cached texture key or an
+    /// allocation failure.
+    pub fn submit_incremental(
+        &mut self,
+        width: u32,
+        height: u32,
+        scene: &Scene,
+        damage: &[Rect],
+    ) -> Result<usize, String> {
+        if width == 0 || height == 0 {
+            return Err("image dimensions must be non-zero".into());
+        }
+        let continuing = matches!(
+            &self.frame_target,
+            Some((w, h, _)) if *w == width && *h == height
+        );
+        let target = match self.frame_target.take() {
+            Some((w, h, target)) if w == width && h == height => {
+                // SAFETY: the pass always owns attachment 0.
+                let attachment =
+                    unsafe { target.pass.colorAttachments().objectAtIndexedSubscript(0) };
+                attachment.setLoadAction(MTLLoadAction::Load);
+                target
+            }
+            _ => new_target(&self.device, width, height, [1.0, 1.0, 1.0, 1.0])?,
+        };
+        let mut vertices: Vec<SceneVertex> = Vec::new();
+        let mut draws: Vec<SceneDraw> = Vec::new();
+        for item in &scene.items {
+            if continuing {
+                if damage.is_empty() {
+                    continue;
+                }
+                if !item_intersects(item, damage) {
+                    continue;
+                }
+            }
+            draws.push(self.append_item(item, width, height, &mut vertices)?);
+        }
+        self.drawn_items = draws.len();
+        self.encode_draws(&target, &vertices, &draws, !continuing)?;
+        self.frame_target = Some((width, height, target));
+        Ok(draws.len())
+    }
+
+    fn append_item(
+        &self,
+        item: &SceneItem,
+        width: u32,
+        height: u32,
+        vertices: &mut Vec<SceneVertex>,
+    ) -> Result<SceneDraw, String> {
+        let start = vertices.len();
+        let (rect, texture, tint) = match item {
+            SceneItem::Rect { rect, color } => (*rect, self.white.clone(), *color),
+            SceneItem::Image {
+                rect,
+                texture,
+                tint,
+            } => (*rect, make_texture(&self.device, texture)?, *tint),
+            SceneItem::CachedImage { rect, key, tint } => (
+                *rect,
+                self.textures
+                    .get(key)
+                    .cloned()
+                    .ok_or_else(|| format!("no cached texture under key {key}"))?,
+                *tint,
+            ),
+        };
+        let to_ndc = |x: f32, y: f32| -> [f32; 2] {
+            [x / width as f32 * 2.0 - 1.0, 1.0 - y / height as f32 * 2.0]
+        };
+        let (x0, y0, x1, y1) = (rect.min_x(), rect.min_y(), rect.max_x(), rect.max_y());
+        let c = [
+            f32::from(tint[0]) / 255.0,
+            f32::from(tint[1]) / 255.0,
+            f32::from(tint[2]) / 255.0,
+            f32::from(tint[3]) / 255.0,
+        ];
+        let p0 = SceneVertex {
+            position: to_ndc(x0, y0),
+            uv: [0.0, 0.0],
+            color: c,
+        };
+        let p1 = SceneVertex {
+            position: to_ndc(x1, y0),
+            uv: [1.0, 0.0],
+            color: c,
+        };
+        let p2 = SceneVertex {
+            position: to_ndc(x1, y1),
+            uv: [1.0, 1.0],
+            color: c,
+        };
+        let p3 = SceneVertex {
+            position: to_ndc(x0, y1),
+            uv: [0.0, 1.0],
+            color: c,
+        };
+        vertices.extend_from_slice(&[p0, p1, p2, p0, p2, p3]);
+        Ok((texture, start, 6))
+    }
+
+    fn encode_draws(
+        &self,
+        target: &Target,
+        vertices: &[SceneVertex],
+        draws: &[SceneDraw],
+        clear: bool,
+    ) -> Result<(), String> {
         if vertices.is_empty() {
-            encode_and_wait(&self.queue, &target, |_encoder| Ok(()))?;
-            return Ok(target);
+            if clear {
+                encode_and_wait(&self.queue, target, |_encoder| Ok(()))?;
+            }
+            return Ok(());
         }
-
-        let bytes = std::mem::size_of_val(vertices.as_slice());
+        let bytes = std::mem::size_of_val(vertices);
         let pointer =
             std::ptr::NonNull::new(vertices.as_ptr().cast::<std::ffi::c_void>().cast_mut())
                 .ok_or("vertex buffer is empty")?;
@@ -845,14 +933,14 @@ impl SceneRenderer {
         }
         .ok_or("could not create the vertex buffer")?;
 
-        encode_and_wait(&self.queue, &target, |encoder| {
+        encode_and_wait(&self.queue, target, |encoder| {
             encoder.setRenderPipelineState(&self.state);
             // SAFETY: buffer index 0 matches the shader signature and the sampler is
             // bound at index 0; every texture and vertex range belongs to a draw.
             unsafe {
                 encoder.setVertexBuffer_offset_atIndex(Some(&buffer), 0, 0);
                 encoder.setFragmentSamplerState_atIndex(Some(&self.sampler), 0);
-                for (texture, start, count) in &draws {
+                for (texture, start, count) in draws {
                     encoder.setFragmentTexture_atIndex(Some(texture), 0);
                     encoder.drawPrimitives_vertexStart_vertexCount(
                         MTLPrimitiveType::Triangle,
@@ -862,8 +950,7 @@ impl SceneRenderer {
                 }
             }
             Ok(())
-        })?;
-        Ok(target)
+        })
     }
 }
 
@@ -874,6 +961,24 @@ impl SceneRenderer {
 /// Returns an error from [`SceneRenderer::new`] or [`SceneRenderer::render`].
 pub fn render_scene(width: u32, height: u32, scene: &Scene) -> Result<Image, String> {
     SceneRenderer::new()?.render(width, height, scene)
+}
+
+fn item_rect(item: &SceneItem) -> Rect {
+    match item {
+        SceneItem::Rect { rect, .. }
+        | SceneItem::Image { rect, .. }
+        | SceneItem::CachedImage { rect, .. } => *rect,
+    }
+}
+
+fn item_intersects(item: &SceneItem, damage: &[Rect]) -> bool {
+    let rect = item_rect(item);
+    damage.iter().any(|d| {
+        rect.min_x() < d.max_x()
+            && d.min_x() < rect.max_x()
+            && rect.min_y() < d.max_y()
+            && d.min_y() < rect.max_y()
+    })
 }
 
 fn encode_and_wait(
@@ -1007,6 +1112,33 @@ mod tests {
         assert_eq!(image.width, 4);
         assert_eq!(image.rgba.len(), 64);
         assert_eq!(image.pixel(0, 0), Some([255, 0, 0, 255]));
+    }
+
+    #[test]
+    fn incremental_submission_filters_by_damage() {
+        let Ok(mut renderer) = SceneRenderer::new() else {
+            return;
+        };
+        let mut scene = Scene::new();
+        scene.push(SceneItem::Rect {
+            rect: Rect::new(0.0, 0.0, 2.0, 2.0),
+            color: [255, 0, 0, 255],
+        });
+        scene.push(SceneItem::Rect {
+            rect: Rect::new(10.0, 10.0, 2.0, 2.0),
+            color: [0, 0, 255, 255],
+        });
+        // No previous frame: everything is drawn.
+        let drawn = renderer.submit_incremental(20, 20, &scene, &[]).unwrap();
+        assert_eq!(drawn, 2);
+        // Damage on the first rect only.
+        let drawn = renderer
+            .submit_incremental(20, 20, &scene, &[Rect::new(0.0, 0.0, 2.0, 2.0)])
+            .unwrap();
+        assert_eq!(drawn, 1);
+        // Empty damage means nothing changed.
+        let drawn = renderer.submit_incremental(20, 20, &scene, &[]).unwrap();
+        assert_eq!(drawn, 0);
     }
 
     #[test]

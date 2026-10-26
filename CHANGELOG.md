@@ -34,6 +34,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - `jkva-shell`: `Frame::render_with` / `submit_with` accept a caller-owned renderer for frame loops.
 - `jkva-text`: shaped-run cache keyed by text and style, capped at 4096 entries with a wholesale clear.
 - `jkva-shell`: glyph rasterization/texture cache and a persistent font cache in `Frame`; two frames with one renderer are identical.
+- `jkva-gfx`: `submit_incremental` keeps the render target, loads it and draws only items intersecting a damage list; `Rect` is re-exported.
+- `engine-bench`: animated game mode with 2000 sprites, damage vs full redraw (0.284 vs 0.544 ms p50, 215 vs 2000 draws).
 - `engine-bench`: end-to-end paint+submit frame benchmark; the same cards frame dropped from p50 8.05 ms to about 0.51 ms (p95 10.81 to 2.46 ms, median of five runs) after the glyph, font and shaped-run caches.
 - `jkva-gfx`: `GpuCapabilities` report (device, buffer and memory budgets, Apple7/8/9 and Metal4, unified memory, timestamp counters) with a cfg-gated test that skips when Metal is unavailable.
 - `gfx-bench`: offscreen Metal frame-time benchmark (4096 quads, 1080p, CPU submit / GPU completion / GPU execution p50+p95, JSON).

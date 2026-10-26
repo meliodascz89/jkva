@@ -59,6 +59,7 @@ What is done, what is verified, and what is deliberately not done yet. Every lin
 | GPU capability probe | done | `jkva-gfx::capabilities()`: Apple M4, 13.6 GiB max buffer, 18.2 GiB working set, timestamp counters |
 | Frame-time benchmark | done | `tools/gfx-bench`: 4096 quads, 1080p, CPU submit p95 0.153 ms, GPU execution p95 1.221 ms |
 | Engine frame benchmark | done | `tools/engine-bench`: cards 800x600 paint+submit p50 0.51 / p95 2.46 ms after glyph, font and shaping caches |
+| Animated game frame + damage | done | 2000 sprites: incremental p50 0.284 ms / 215 items vs full 0.544 ms / 2000 items |
 | WebGPU / WebGL, WASM, gamepad, pointer lock, audio | not yet | M4/M6 |
 | Performance targets (p95 frame time, input latency) | defined | [Gaming platform](gaming.md) |
 
