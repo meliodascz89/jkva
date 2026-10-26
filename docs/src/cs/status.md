@@ -55,6 +55,7 @@ Co je hotové, co je ověřené a co se záměrně ještě nedělá. Každý ř�
 | Hraní jako první třída 0.1 | rozhodnuto | ADR-026 v `briefing/DECISIONS.md` |
 | UDP s grantem (Tokio) | hotovo | `jkva-net::udp`: default deny, grant per origin i aplikace, revoke, limity velikosti a objemu |
 | Gamepad vstup přes IPC v2 | hotovo | `InputEvent::Gamepad` s tlačítky a osami |
+| GPU command ABI | hotovo | `jkva-gpu`: typované příkazy, limity zařízení, vyvážené passy, verzované rámce, 7 testů |
 | Frame pacing s pevným krokem | hotovo | `jkva-core::frame::FrameClock`: cap kroků, interpolační alpha, změna rate |
 | GPU capability probe | hotovo | `jkva-gfx::capabilities()`: Apple M4, 13,6 GiB max buffer, 18,2 GiB working set, timestamp counters |
 | Frame-time benchmark | hotovo | `tools/gfx-bench`: 4096 quadů, 1080p, CPU submit p95 0,153 ms, GPU execution p95 1,221 ms |

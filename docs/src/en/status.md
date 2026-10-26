@@ -55,6 +55,7 @@ What is done, what is verified, and what is deliberately not done yet. Every lin
 | Gaming treated as a first-class 0.1 goal | decided | ADR-026 in `briefing/DECISIONS.md` |
 | Permission-gated UDP (Tokio) | done | `jkva-net::udp`: default deny, per-origin and per-application grants, revoke, datagram size and byte budget |
 | Gamepad input over IPC v2 | done | `InputEvent::Gamepad` with buttons and axes |
+| GPU command ABI | done | `jkva-gpu`: typed commands, device limits, balanced passes, versioned frames, 7 tests |
 | Fixed-timestep frame pacing | done | `jkva-core::frame::FrameClock`: capped steps, interpolation alpha, rate change |
 | GPU capability probe | done | `jkva-gfx::capabilities()`: Apple M4, 13.6 GiB max buffer, 18.2 GiB working set, timestamp counters |
 | Frame-time benchmark | done | `tools/gfx-bench`: 4096 quads, 1080p, CPU submit p95 0.153 ms, GPU execution p95 1.221 ms |

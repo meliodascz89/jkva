@@ -78,6 +78,20 @@ Scope: layout and style are static (built once), the measured frame rebuilds the
 
 2000 sprites, 100 of them moving, 800×600, median of five runs. Damage rendering keeps the target between frames, loads it instead of clearing, and draws only the items intersecting the damage rectangles — 9.3x fewer draws and about 1.9x better p50. The p95 is dominated by GPU fill and is nearly unchanged, which is the honest limit of this path until a real compositor with layers exists. There is still no JS, WASM or layout in this loop.
 
+## GPU command ABI
+
+The renderer does not talk to Metal directly. It builds a typed `CommandList`
+(create buffer/texture, write, begin pass, draw, end pass), validates it against
+the negotiated `DeviceCaps` — buffer and texture limits, balanced passes, draw
+budget, resource existence — and encodes it into a versioned frame. The GPU
+process decodes, validates again and executes; a foreign version is rejected
+instead of half-executed.
+
+This is the seam a Metal backend and a future WebGPU-style API share. The current
+surface is deliberately small: buffers, textures, one render pass and draws.
+Pipelines, bind groups, samplers and compute come next. The crate is
+`jkva-gpu`; it is portable and covered by the Linux CI job.
+
 ## Status
 
 The design is in ADR-026. Done: the permission-gated UDP transport in `jkva-net` (Tokio, default deny, grant/revoke, quotas) and the fixed-timestep `FrameClock` in `jkva-core` (capped simulation steps, interpolation alpha, rate changes). In progress: the GPU capability probe and frame-time harness in `jkva-gfx`. Gamepad input is a typed message in `jkva-ipc` protocol v2.

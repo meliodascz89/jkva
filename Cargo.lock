@@ -280,6 +280,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "jkva-gpu"
+version = "0.0.0"
+dependencies = [
+ "bincode",
+ "serde",
+]
+
+[[package]]
 name = "jkva-ipc"
 version = "0.0.0"
 dependencies = [

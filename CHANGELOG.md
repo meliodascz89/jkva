@@ -30,6 +30,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - `jkva-style`: `border-*-width` and `border-*-style`, with `border-width`, `border-style` and `border` shorthand expansion (border colour is still `currentColor`).
 - `jkva-style`: CSS parser, structural selector model, L4 specificity, selector matching and the cascade into `ComputedStyle` (at-rule contents, `var()` and a UA stylesheet are not implemented yet).
 - `jkva-text`: font discovery (fontdb), HarfBuzz shaping (harfrust) and glyph rasterization to alpha coverage (swash), with a documented fallback chain.
+- `jkva-gpu`: backend-neutral GPU command ABI — typed commands, device limits, balanced-pass validation, versioned framing (7 tests).
 - `jkva-gfx`: persistent `SceneRenderer` reuses device, queue, pipeline, sampler and white texture; `submit` skips CPU readback and `render_scene` delegates to it.
 - `jkva-shell`: `Frame::render_with` / `submit_with` accept a caller-owned renderer for frame loops.
 - `jkva-text`: shaped-run cache keyed by text and style, capped at 4096 entries with a wholesale clear.

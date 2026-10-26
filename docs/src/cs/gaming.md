@@ -78,6 +78,12 @@ Rozsah: layout a styly jsou statické (postavené jednou), měřený frame znovu
 
 2000 spritů, 100 se pohybuje, 800×600, medián pěti běhů. Damage rendering drží target mezi framy, načítá ho místo clearu a kreslí jen itemy protínající damage rectangles — 9,3× méně draw callů a zhruba 1,9× lepší p50. p95 je dané fillem GPU a téměř se nemění, což je poctivý limit této cesty, dokud nebude skutečný kompositor s vrstvami. V loopu pořád není JS, WASM ani layout.
 
+## GPU command ABI
+
+Renderer nemluví s Metalem přímo. Staví typovaný `CommandList` (vytvoř buffer/texturu, zapiš, začni pass, draw, ukonči pass), validuje ho proti vyjednaným `DeviceCaps` — limity bufferů a textur, vyvážené passy, draw budget, existence resource — a zakóduje do verzovaného rámce. GPU proces ho dekóduje, znovu zvaliduje a vykoná; cizí verze se odmítne, místo aby se vykonala napůl.
+
+To je šev, který sdílí Metal backend a budoucí WebGPU-style API. Aktuální plocha je záměrně malá: buffery, textury, jeden render pass a draw. Pipelines, bind groups, samplery a compute přijdou dál. Crate je `jkva-gpu`, je portable a běží v Linux CI.
+
 ## Stav
 
 Design je v ADR-026. Hotové: permission-gated UDP transport v `jkva-net` (Tokio, default deny, grant/revoke, kvóty) a fixed-timestep `FrameClock` v `jkva-core` (cap na kroky, interpolační alpha, změna rate). Rozpracované: GPU capability probe a frame-time harness v `jkva-gfx`. Gamepad vstup je typovaná zpráva v `jkva-ipc` protokolu v2.

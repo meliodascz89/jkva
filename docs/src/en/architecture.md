@@ -6,6 +6,7 @@ JKva is a Cargo workspace with one crate per layer. Dependencies point only down
 |---|---|
 | `jkva-core` | identifiers, arenas, scheduling primitives, diagnostics |
 | `jkva-ipc` | versioned, length-prefixed messages between the browser, renderer, GPU and network processes |
+| `jkva-gpu` | backend-neutral GPU command ABI (buffers, textures, passes, draws) with validation and versioned framing |
 | `jkva-platform` | Metal device, thread QoS, signposts, clipboard, files |
 | `jkva-net` | network transports; permission-gated UDP for games (ADR-026) |
 | `jkva-dom` | HTML tree, events, shadow roots |
