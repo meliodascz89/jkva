@@ -504,6 +504,18 @@ pub struct TextureData {
 /// One drawable item of a [`Scene`], in paint order.
 #[derive(Clone, Debug, PartialEq)]
 pub enum SceneItem {
+    /// An image whose pixels the renderer already owns under `key`.
+    ///
+    /// The caller uploads it once through [`SceneRenderer::ensure_texture`]; every
+    /// later frame refers to it by key instead of copying the pixels again.
+    CachedImage {
+        /// Destination rectangle in CSS pixels.
+        rect: Rect,
+        /// Key passed to [`SceneRenderer::ensure_texture`].
+        key: u64,
+        /// Straight sRGB RGBA colour multiplied with the texture.
+        tint: [u8; 4],
+    },
     /// A solid rectangle.
     Rect {
         /// Position and size in scene pixels.
@@ -670,6 +682,7 @@ pub struct SceneRenderer {
     state: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
     sampler: Retained<ProtocolObject<dyn MTLSamplerState>>,
     white: Retained<ProtocolObject<dyn MTLTexture>>,
+    textures: std::collections::HashMap<u64, Retained<ProtocolObject<dyn MTLTexture>>>,
 }
 
 impl SceneRenderer {
@@ -709,7 +722,26 @@ impl SceneRenderer {
             state,
             sampler,
             white,
+            textures: std::collections::HashMap::new(),
         })
+    }
+
+    /// Uploads a texture once and keeps it for later [`SceneItem::CachedImage`]
+    /// references.
+    ///
+    /// Uploading the same key again replaces the texture; callers must change the
+    /// key when the pixels change.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the texture cannot be created.
+    pub fn ensure_texture(&mut self, key: u64, data: &TextureData) -> Result<(), String> {
+        if self.textures.contains_key(&key) {
+            return Ok(());
+        }
+        let texture = make_texture(&self.device, data)?;
+        self.textures.insert(key, texture);
+        Ok(())
     }
 
     /// Renders a scene and reads the result back to the CPU.
@@ -745,12 +777,20 @@ impl SceneRenderer {
         for item in &scene.items {
             let start = vertices.len();
             let (rect, texture, tint) = match item {
-                SceneItem::Rect { rect, color } => (*rect, None, *color),
+                SceneItem::Rect { rect, color } => (*rect, self.white.clone(), *color),
                 SceneItem::Image {
                     rect,
                     texture,
                     tint,
-                } => (*rect, Some(texture), *tint),
+                } => (*rect, make_texture(&self.device, texture)?, *tint),
+                SceneItem::CachedImage { rect, key, tint } => (
+                    *rect,
+                    self.textures
+                        .get(key)
+                        .cloned()
+                        .ok_or_else(|| format!("no cached texture under key {key}"))?,
+                    *tint,
+                ),
             };
             let to_ndc = |x: f32, y: f32| -> [f32; 2] {
                 [x / width as f32 * 2.0 - 1.0, 1.0 - y / height as f32 * 2.0]
@@ -783,10 +823,6 @@ impl SceneRenderer {
                 color: c,
             };
             vertices.extend_from_slice(&[p0, p1, p2, p0, p2, p3]);
-            let texture = match texture {
-                Some(data) => make_texture(&self.device, data)?,
-                None => self.white.clone(),
-            };
             draws.push((texture, start, 6));
         }
 
@@ -971,6 +1007,29 @@ mod tests {
         assert_eq!(image.width, 4);
         assert_eq!(image.rgba.len(), 64);
         assert_eq!(image.pixel(0, 0), Some([255, 0, 0, 255]));
+    }
+
+    #[test]
+    fn a_cached_texture_is_uploaded_once_and_drawn() {
+        let Ok(mut renderer) = SceneRenderer::new() else {
+            return;
+        };
+        let data = TextureData {
+            width: 1,
+            height: 1,
+            rgba: vec![0, 255, 0, 255],
+        };
+        renderer.ensure_texture(7, &data).unwrap();
+        // A second call must be a no-op, not a re-upload or an error.
+        renderer.ensure_texture(7, &data).unwrap();
+        let mut scene = Scene::new();
+        scene.push(SceneItem::CachedImage {
+            rect: Rect::new(0.0, 0.0, 2.0, 2.0),
+            key: 7,
+            tint: [255, 255, 255, 255],
+        });
+        let image = renderer.render(4, 4, &scene).unwrap();
+        assert_eq!(image.pixel(0, 0), Some([0, 255, 0, 255]));
     }
 
     #[test]

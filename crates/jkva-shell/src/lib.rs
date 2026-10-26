@@ -23,6 +23,8 @@
 #![deny(missing_docs)]
 
 use std::cell::RefCell;
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 
 use jkva_dom::{Document, NodeId, NodeKind};
 use jkva_engine::parse_page;
@@ -65,7 +67,7 @@ pub fn render_page(html: &str, width: u32, height: u32) -> Result<RenderOutput, 
     if width == 0 || height == 0 {
         return Err("viewport dimensions must be non-zero".into());
     }
-    let frame = Frame::new(html, width, height)?;
+    let mut frame = Frame::new(html, width, height)?;
     let image = frame.render()?;
     Ok(RenderOutput {
         image,
@@ -81,7 +83,6 @@ pub fn render_page(html: &str, width: u32, height: u32) -> Result<RenderOutput, 
 /// region that must be repainted. Matching and layout are still whole-document
 /// passes; what is incremental today is the *damage*, which is the contract the
 /// compositor will consume in M2/M3.
-#[derive(Debug)]
 pub struct Frame {
     /// The document.
     pub document: Document,
@@ -97,6 +98,10 @@ pub struct Frame {
     pub warnings: Vec<String>,
     /// Damage from the most recent mutation, empty after [`Frame::new`].
     pub damage: DamageRegion,
+    /// Rasterized glyphs reused across frames.
+    glyphs: GlyphCache,
+    /// Font database and face cache reused across frames.
+    fonts: FontCache,
 }
 
 impl Frame {
@@ -129,6 +134,8 @@ impl Frame {
             viewport,
             warnings: page.warnings,
             damage: DamageRegion::new(),
+            glyphs: GlyphCache::default(),
+            fonts,
         })
     }
 
@@ -177,7 +184,7 @@ impl Frame {
     /// # Errors
     ///
     /// Returns an error when Metal is unavailable or the scene cannot be built.
-    pub fn render(&self) -> Result<Image, String> {
+    pub fn render(&mut self) -> Result<Image, String> {
         let mut renderer = SceneRenderer::new()?;
         self.render_with(&mut renderer)
     }
@@ -190,10 +197,15 @@ impl Frame {
     /// # Errors
     ///
     /// Returns an error when the scene cannot be built or the GPU rejects the frame.
-    pub fn render_with(&self, renderer: &mut SceneRenderer) -> Result<Image, String> {
-        let mut fonts = FontCache::new();
+    pub fn render_with(&mut self, renderer: &mut SceneRenderer) -> Result<Image, String> {
         let styles_adapter = Styles::new(&self.styles, &self.document);
-        let scene = build_scene(&self.layout, &styles_adapter, &mut fonts);
+        let scene = build_scene(
+            &self.layout,
+            &styles_adapter,
+            &mut self.fonts,
+            &mut self.glyphs,
+        );
+        self.upload_glyphs(renderer)?;
         renderer.render(
             self.viewport.width as u32,
             self.viewport.height as u32,
@@ -201,15 +213,28 @@ impl Frame {
         )
     }
 
+    /// Makes every cached glyph texture known to the renderer (idempotent).
+    fn upload_glyphs(&self, renderer: &mut SceneRenderer) -> Result<(), String> {
+        for (key, glyph) in &self.glyphs.glyphs {
+            renderer.ensure_texture(*key, &glyph.texture)?;
+        }
+        Ok(())
+    }
+
     /// Draws the frame without reading the pixels back.
     ///
     /// # Errors
     ///
     /// Returns an error when the scene cannot be built or the GPU rejects the frame.
-    pub fn submit_with(&self, renderer: &mut SceneRenderer) -> Result<(), String> {
-        let mut fonts = FontCache::new();
+    pub fn submit_with(&mut self, renderer: &mut SceneRenderer) -> Result<(), String> {
         let styles_adapter = Styles::new(&self.styles, &self.document);
-        let scene = build_scene(&self.layout, &styles_adapter, &mut fonts);
+        let scene = build_scene(
+            &self.layout,
+            &styles_adapter,
+            &mut self.fonts,
+            &mut self.glyphs,
+        );
+        self.upload_glyphs(renderer)?;
         renderer.submit(
             self.viewport.width as u32,
             self.viewport.height as u32,
@@ -553,7 +578,40 @@ fn text_style(size: f32, weight: u16, family: &str) -> TextStyle {
     }
 }
 
-fn build_scene(tree: &LayoutTree, styles: &Styles<'_>, fonts: &mut FontCache) -> Scene {
+/// Rasterized glyphs keyed by glyph identity and style.
+///
+/// A glyph bitmap does not depend on its position, so the same glyph in the same
+/// style can be uploaded once and reused for every frame that draws it.
+#[derive(Debug, Default)]
+struct GlyphCache {
+    glyphs: HashMap<u64, CachedGlyph>,
+}
+
+/// One rasterized glyph bitmap plus its placement offsets.
+#[derive(Debug, Clone)]
+struct CachedGlyph {
+    texture: TextureData,
+    left: i32,
+    top: i32,
+}
+
+/// Hashes the inputs that determine a glyph bitmap.
+fn glyph_key(id: u16, style: &TextStyle) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    id.hash(&mut hasher);
+    style.size.to_bits().hash(&mut hasher);
+    style.weight.hash(&mut hasher);
+    style.family.hash(&mut hasher);
+    style.italic.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn build_scene(
+    tree: &LayoutTree,
+    styles: &Styles<'_>,
+    fonts: &mut FontCache,
+    glyphs: &mut GlyphCache,
+) -> Scene {
     let mut scene = Scene::new();
     for b in &tree.boxes {
         if let Some(color) = styles.background_color(b.node) {
@@ -609,28 +667,39 @@ fn build_scene(tree: &LayoutTree, styles: &Styles<'_>, fonts: &mut FontCache) ->
         for glyph in &shaped.glyphs {
             let glyph_x = pen + glyph.x;
             pen += glyph.advance;
-            let Some(bitmap) = fonts.rasterize(glyph.id, &style) else {
-                continue;
+            let key = glyph_key(glyph.id, &style);
+            let cached = match glyphs.glyphs.entry(key) {
+                std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    let Some(bitmap) = fonts.rasterize(glyph.id, &style) else {
+                        continue;
+                    };
+                    if bitmap.width == 0 || bitmap.height == 0 {
+                        continue;
+                    }
+                    let mut rgba = Vec::with_capacity(bitmap.alpha.len() * 4);
+                    for alpha in &bitmap.alpha {
+                        rgba.extend_from_slice(&[255, 255, 255, *alpha]);
+                    }
+                    entry.insert(CachedGlyph {
+                        texture: TextureData {
+                            width: bitmap.width,
+                            height: bitmap.height,
+                            rgba,
+                        },
+                        left: bitmap.left,
+                        top: bitmap.top,
+                    })
+                }
             };
-            if bitmap.width == 0 || bitmap.height == 0 {
-                continue;
-            }
-            let mut rgba = Vec::with_capacity(bitmap.alpha.len() * 4);
-            for alpha in &bitmap.alpha {
-                rgba.extend_from_slice(&[255, 255, 255, *alpha]);
-            }
-            scene.push(SceneItem::Image {
+            scene.push(SceneItem::CachedImage {
                 rect: PaintRect::new(
-                    run.origin.x + glyph_x + bitmap.left as f32,
-                    baseline - glyph.y - bitmap.top as f32,
-                    bitmap.width as f32,
-                    bitmap.height as f32,
+                    run.origin.x + glyph_x + cached.left as f32,
+                    baseline - glyph.y - cached.top as f32,
+                    cached.texture.width as f32,
+                    cached.texture.height as f32,
                 ),
-                texture: TextureData {
-                    width: bitmap.width,
-                    height: bitmap.height,
-                    rgba,
-                },
+                key,
                 tint: run.color,
             });
         }
@@ -674,8 +743,21 @@ mod tests {
     "#;
 
     #[test]
+    fn two_frames_with_one_renderer_are_identical() {
+        let Ok(mut frame) = Frame::new("<p>Hello cache</p>", 200, 100) else {
+            return;
+        };
+        let Ok(mut renderer) = SceneRenderer::new() else {
+            return;
+        };
+        let first = frame.render_with(&mut renderer).unwrap();
+        let second = frame.render_with(&mut renderer).unwrap();
+        assert_eq!(first, second, "cached glyphs must not change the frame");
+    }
+
+    #[test]
     fn a_border_colour_is_painted() {
-        let frame = Frame::new(
+        let mut frame = Frame::new(
             "<style>#b { border: 2px solid #00ff00; width: 50px; height: 20px }</style><div id=\"b\"></div>",
             200,
             100,
@@ -692,7 +774,7 @@ mod tests {
 
     #[test]
     fn an_inline_background_is_painted_behind_its_text() {
-        let frame = Frame::new(
+        let mut frame = Frame::new(
             "<style>#s { background-color: #ff0000 }</style><p>before <span id=\"s\">xx</span> after</p>",
             400,
             100,

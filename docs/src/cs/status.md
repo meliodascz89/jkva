@@ -58,7 +58,7 @@ Co je hotové, co je ověřené a co se záměrně ještě nedělá. Každý ř�
 | Frame pacing s pevným krokem | hotovo | `jkva-core::frame::FrameClock`: cap kroků, interpolační alpha, změna rate |
 | GPU capability probe | hotovo | `jkva-gfx::capabilities()`: Apple M4, 13,6 GiB max buffer, 18,2 GiB working set, timestamp counters |
 | Frame-time benchmark | hotovo | `tools/gfx-bench`: 4096 quadů, 1080p, CPU submit p95 0,153 ms, GPU execution p95 1,221 ms |
-| Engine frame benchmark | hotovo | `tools/engine-bench`: cards 800x600 paint+submit p50 8,05 / p95 10,81 ms |
+| Engine frame benchmark | hotovo | `tools/engine-bench`: cards 800x600 paint+submit p50 0,62 / p95 3,40 ms po cache glyfů a fontů |
 | WebGPU / WebGL, WASM, gamepad, pointer lock, audio | zatím ne | M4/M6 |
 | Výkonnostní cíle (p95 frame time, vstupní latence) | definováno | [Herní platforma](gaming.md) |
 

@@ -63,9 +63,9 @@ Capabilities: Apple M4, `maxBufferLength` 13 639,7 MiB, doporučený working set
 
 | Metrika | p50 | p95 |
 |---|---:|---:|
-| Jeden frame (stavba scény + čekání na GPU) | 8,05 ms | 10,81 ms |
+| Jeden frame (stavba scény + čekání na GPU) | 0,62 ms | 3,40 ms |
 
-Rozsah: layout a styly jsou statické (postavené jednou), měřený frame znovu staví scénu — pozadí, rámečky, shaping a rasterizaci glyfů — nahraje ji a čeká na GPU, bez readbacku na CPU. To je číslo, které musí zlepšit cache glyfových textur; není to herní scéna a zatím to není srovnatelné s Chrome.
+Rozsah: layout a styly jsou statické (postavené jednou), měřený frame znovu staví scénu — pozadí, rámečky, shaping a rasterizaci glyfů — nahraje ji a čeká na GPU, bez readbacku na CPU. Po cache glyfových textur a fontů spadl stejný frame z 8,05 na zhruba 0,62 ms p50 (z 10,81 na 3,40 ms p95, medián pěti běhů); pořád je to statická stránka, ne herní scéna, a zatím to není srovnatelné s Chrome.
 
 ## Stav
 

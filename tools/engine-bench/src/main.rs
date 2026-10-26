@@ -88,7 +88,7 @@ fn main() -> Result<(), String> {
         return Err("--frames must be positive".into());
     }
     let html = std::fs::read_to_string(&page).map_err(|e| format!("cannot read {page}: {e}"))?;
-    let frame = Frame::new(&html, width, height)?;
+    let mut frame = Frame::new(&html, width, height)?;
     let mut renderer = SceneRenderer::new()?;
 
     for _ in 0..warmup {
