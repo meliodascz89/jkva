@@ -26,7 +26,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Version of the GPU command protocol.
-pub const PROTOCOL_VERSION: u16 = 2;
+pub const PROTOCOL_VERSION: u16 = 3;
 
 /// Largest encoded command list accepted by [`CommandList::decode`].
 pub const MAX_COMMAND_BYTES: u32 = 32 * 1024 * 1024;
@@ -110,6 +110,15 @@ pub enum BufferUsage {
     Readback,
 }
 
+/// What a texture is used for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TextureUsage {
+    /// Render target for a pass.
+    RenderTarget,
+    /// Sampled by a draw.
+    Sampled,
+}
+
 /// Texture formats the ABI knows today.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TextureFormat {
@@ -150,6 +159,22 @@ pub enum Command {
         height: u32,
         /// Pixel format.
         format: TextureFormat,
+        /// What the texture will be used for.
+        usage: TextureUsage,
+    },
+    /// Uploads tightly packed RGBA8 pixels into a sampled texture.
+    WriteTexture {
+        /// Target texture; it must have been created with [`TextureUsage::Sampled`].
+        id: ResourceId,
+        /// Exactly `width * height * 4` bytes.
+        data: Vec<u8>,
+    },
+    /// Binds a sampled texture for the following draws.
+    BindTexture {
+        /// Binding slot; the scene pipeline reads slot 0.
+        slot: u32,
+        /// Texture to bind; it must have been created as [`TextureUsage::Sampled`].
+        id: ResourceId,
     },
     /// Starts a render pass into a texture.
     BeginPass {
@@ -232,6 +257,20 @@ pub enum GpuError {
     },
     /// A resource id was created twice.
     ResourceAlreadyExists(ResourceId),
+    /// A resource was used with the wrong usage.
+    WrongUsage {
+        /// The resource.
+        id: ResourceId,
+        /// What the command needed.
+        expected: TextureUsage,
+    },
+    /// A texture upload has the wrong byte length.
+    TextureDataSize {
+        /// Expected bytes for the format and size.
+        expected: usize,
+        /// Bytes supplied.
+        actual: usize,
+    },
     /// The frame version does not match [`PROTOCOL_VERSION`].
     VersionMismatch {
         /// Version found in the frame.
@@ -267,6 +306,12 @@ impl std::fmt::Display for GpuError {
                 write!(f, "{count} draws exceed the limit of {maximum}")
             }
             Self::ResourceAlreadyExists(id) => write!(f, "resource {} already exists", id.0),
+            Self::WrongUsage { id, expected } => {
+                write!(f, "resource {} is not usable as {expected:?}", id.0)
+            }
+            Self::TextureDataSize { expected, actual } => {
+                write!(f, "texture upload has {actual} bytes, expected {expected}")
+            }
             Self::VersionMismatch { found, expected } => {
                 write!(f, "protocol version {found}, expected {expected}")
             }
@@ -302,13 +347,15 @@ impl CommandList {
     /// Returns the first violation found, in command order.
     pub fn validate(&self, caps: &DeviceCaps) -> Result<(), GpuError> {
         let mut buffers: Vec<(ResourceId, u64)> = Vec::new();
-        let mut textures: Vec<ResourceId> = Vec::new();
+        let mut textures: Vec<(ResourceId, u32, u32, TextureUsage)> = Vec::new();
         let mut pass_open = false;
         let mut draws = 0u32;
         for command in &self.commands {
             match command {
                 Command::CreateBuffer { id, size, .. } => {
-                    if buffers.iter().any(|(existing, _)| existing == id) || textures.contains(id) {
+                    if buffers.iter().any(|(existing, _)| existing == id)
+                        || textures.iter().any(|(existing, ..)| existing == id)
+                    {
                         return Err(GpuError::ResourceAlreadyExists(*id));
                     }
                     if *size > caps.limits.max_buffer_bytes {
@@ -334,9 +381,15 @@ impl CommandList {
                     }
                 }
                 Command::CreateTexture {
-                    id, width, height, ..
+                    id,
+                    width,
+                    height,
+                    usage,
+                    ..
                 } => {
-                    if textures.contains(id) || buffers.iter().any(|(existing, _)| existing == id) {
+                    if textures.iter().any(|(existing, ..)| existing == id)
+                        || buffers.iter().any(|(existing, _)| existing == id)
+                    {
                         return Err(GpuError::ResourceAlreadyExists(*id));
                     }
                     if *width > caps.limits.max_texture_dimension
@@ -348,14 +401,58 @@ impl CommandList {
                             maximum: caps.limits.max_texture_dimension,
                         });
                     }
-                    textures.push(*id);
+                    textures.push((*id, *width, *height, *usage));
+                }
+                Command::WriteTexture { id, data } => {
+                    let Some((_, width, height, usage)) =
+                        textures.iter().find(|(existing, ..)| existing == id)
+                    else {
+                        return Err(GpuError::UnknownResource(*id));
+                    };
+                    if *usage != TextureUsage::Sampled {
+                        return Err(GpuError::WrongUsage {
+                            id: *id,
+                            expected: TextureUsage::Sampled,
+                        });
+                    }
+                    let expected = (*width as usize) * (*height as usize) * 4;
+                    if data.len() != expected {
+                        return Err(GpuError::TextureDataSize {
+                            expected,
+                            actual: data.len(),
+                        });
+                    }
+                }
+                Command::BindTexture { id, .. } => {
+                    if !pass_open {
+                        return Err(GpuError::NoPass);
+                    }
+                    let Some((_, _, _, usage)) =
+                        textures.iter().find(|(existing, ..)| existing == id)
+                    else {
+                        return Err(GpuError::UnknownResource(*id));
+                    };
+                    if *usage != TextureUsage::Sampled {
+                        return Err(GpuError::WrongUsage {
+                            id: *id,
+                            expected: TextureUsage::Sampled,
+                        });
+                    }
                 }
                 Command::BeginPass { target, .. } => {
                     if pass_open {
                         return Err(GpuError::PassAlreadyOpen);
                     }
-                    if !textures.contains(target) {
+                    let Some((_, _, _, usage)) =
+                        textures.iter().find(|(existing, ..)| existing == target)
+                    else {
                         return Err(GpuError::UnknownResource(*target));
+                    };
+                    if *usage != TextureUsage::RenderTarget {
+                        return Err(GpuError::WrongUsage {
+                            id: *target,
+                            expected: TextureUsage::RenderTarget,
+                        });
                     }
                     pass_open = true;
                 }
@@ -480,6 +577,18 @@ mod tests {
             width: 320,
             height: 200,
             format: TextureFormat::Rgba8Unorm,
+            usage: TextureUsage::RenderTarget,
+        });
+        list.push(Command::CreateTexture {
+            id: ResourceId(3),
+            width: 1,
+            height: 1,
+            format: TextureFormat::Rgba8Unorm,
+            usage: TextureUsage::Sampled,
+        });
+        list.push(Command::WriteTexture {
+            id: ResourceId(3),
+            data: vec![0, 255, 0, 255],
         });
         list.push(Command::BeginPass {
             target: ResourceId(2),
@@ -488,6 +597,10 @@ mod tests {
         list.push(Command::BindVertexBuffer {
             slot: 0,
             id: ResourceId(1),
+        });
+        list.push(Command::BindTexture {
+            slot: 0,
+            id: ResourceId(3),
         });
         list.push(Command::Draw {
             pipeline: 0,
@@ -574,12 +687,54 @@ mod tests {
             width: 1,
             height: 1,
             format: TextureFormat::Rgba8Unorm,
+            usage: TextureUsage::RenderTarget,
         });
         open.push(Command::BeginPass {
             target: ResourceId(1),
             clear: [0.0; 4],
         });
         assert_eq!(open.validate(&caps()), Err(GpuError::PassNotEnded));
+    }
+
+    #[test]
+    fn texture_usage_and_upload_size_are_enforced() {
+        let mut list = CommandList::new();
+        list.push(Command::CreateTexture {
+            id: ResourceId(1),
+            width: 2,
+            height: 2,
+            format: TextureFormat::Rgba8Unorm,
+            usage: TextureUsage::RenderTarget,
+        });
+        list.push(Command::BeginPass {
+            target: ResourceId(1),
+            clear: [0.0; 4],
+        });
+        list.push(Command::BindTexture {
+            slot: 0,
+            id: ResourceId(1),
+        });
+        assert!(matches!(
+            list.validate(&caps()),
+            Err(GpuError::WrongUsage { .. })
+        ));
+
+        let mut upload = CommandList::new();
+        upload.push(Command::CreateTexture {
+            id: ResourceId(2),
+            width: 2,
+            height: 2,
+            format: TextureFormat::Rgba8Unorm,
+            usage: TextureUsage::Sampled,
+        });
+        upload.push(Command::WriteTexture {
+            id: ResourceId(2),
+            data: vec![0; 15],
+        });
+        assert!(matches!(
+            upload.validate(&caps()),
+            Err(GpuError::TextureDataSize { .. })
+        ));
     }
 
     #[test]

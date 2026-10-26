@@ -12,15 +12,15 @@
 
 use std::collections::HashMap;
 
-use jkva_gpu::{Command, CommandList, ResourceId};
+use jkva_gpu::{Command, CommandList, ResourceId, TextureUsage};
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
 use objc2_metal::{
     MTLBuffer, MTLClearColor, MTLCommandBuffer, MTLCommandEncoder, MTLCommandQueue, MTLDevice,
-    MTLLoadAction, MTLOrigin, MTLPrimitiveType, MTLRegion, MTLRenderCommandEncoder,
+    MTLLoadAction, MTLOrigin, MTLPixelFormat, MTLPrimitiveType, MTLRegion, MTLRenderCommandEncoder,
     MTLRenderPassDescriptor, MTLRenderPipelineState, MTLResourceOptions, MTLSamplerAddressMode,
-    MTLSamplerDescriptor, MTLSamplerMinMagFilter, MTLSamplerState, MTLSize, MTLStoreAction,
-    MTLTexture,
+    MTLSamplerDescriptor, MTLSamplerMinMagFilter, MTLSamplerState, MTLSize, MTLStorageMode,
+    MTLStoreAction, MTLTexture, MTLTextureDescriptor, MTLTextureUsage,
 };
 
 use crate::{Image, TextureData, build_scene_pipeline, make_texture, new_target};
@@ -33,7 +33,9 @@ pub struct GpuExecutor {
     sampler: Retained<ProtocolObject<dyn MTLSamplerState>>,
     white: Retained<ProtocolObject<dyn MTLTexture>>,
     buffers: HashMap<ResourceId, Retained<ProtocolObject<dyn MTLBuffer>>>,
-    textures: HashMap<ResourceId, Retained<ProtocolObject<dyn MTLTexture>>>,
+    targets: HashMap<ResourceId, Retained<ProtocolObject<dyn MTLTexture>>>,
+    sampled: HashMap<ResourceId, Retained<ProtocolObject<dyn MTLTexture>>>,
+    current_texture: Option<Retained<ProtocolObject<dyn MTLTexture>>>,
     command_buffer: Option<Retained<ProtocolObject<dyn MTLCommandBuffer>>>,
     encoder: Option<Retained<ProtocolObject<dyn MTLRenderCommandEncoder>>>,
     bound_vertex: Option<Retained<ProtocolObject<dyn MTLBuffer>>>,
@@ -78,7 +80,9 @@ impl GpuExecutor {
             sampler,
             white,
             buffers: HashMap::new(),
-            textures: HashMap::new(),
+            targets: HashMap::new(),
+            sampled: HashMap::new(),
+            current_texture: None,
             command_buffer: None,
             encoder: None,
             bound_vertex: None,
@@ -104,7 +108,8 @@ impl GpuExecutor {
                         )
                         .ok_or("could not create the buffer")?;
                     self.buffers.insert(*id, buffer);
-                    self.textures.remove(id);
+                    self.targets.remove(id);
+                    self.sampled.remove(id);
                 }
                 Command::WriteBuffer { id, offset, data } => {
                     let buffer = self
@@ -123,11 +128,63 @@ impl GpuExecutor {
                     }
                 }
                 Command::CreateTexture {
-                    id, width, height, ..
+                    id,
+                    width,
+                    height,
+                    usage,
+                    ..
                 } => {
-                    let target = new_target(&self.device, *width, *height, [0.0, 0.0, 0.0, 1.0])?;
-                    self.textures.insert(*id, target.texture);
+                    let texture = match usage {
+                        TextureUsage::RenderTarget => {
+                            new_target(&self.device, *width, *height, [0.0, 0.0, 0.0, 1.0])?.texture
+                        }
+                        TextureUsage::Sampled => sampled_texture(&self.device, *width, *height)?,
+                    };
+                    match usage {
+                        TextureUsage::RenderTarget => {
+                            self.targets.insert(*id, texture);
+                        }
+                        TextureUsage::Sampled => {
+                            self.sampled.insert(*id, texture);
+                        }
+                    }
                     self.buffers.remove(id);
+                }
+                Command::WriteTexture { id, data } => {
+                    let texture = self
+                        .sampled
+                        .get(id)
+                        .ok_or_else(|| format!("unknown sampled texture {}", id.0))?;
+                    let width = texture.width();
+                    let height = texture.height();
+                    let region = MTLRegion {
+                        origin: MTLOrigin { x: 0, y: 0, z: 0 },
+                        size: MTLSize {
+                            width,
+                            height,
+                            depth: 1,
+                        },
+                    };
+                    let pixels =
+                        std::ptr::NonNull::new(data.as_ptr().cast_mut().cast::<std::ffi::c_void>())
+                            .ok_or("empty texture upload")?;
+                    // SAFETY: the ABI validator checked `data` is exactly
+                    // width*height*4 bytes and the texture is Shared.
+                    unsafe {
+                        texture.replaceRegion_mipmapLevel_withBytes_bytesPerRow(
+                            region,
+                            0,
+                            pixels,
+                            width as usize * 4,
+                        );
+                    }
+                }
+                Command::BindTexture { id, .. } => {
+                    let texture = self
+                        .sampled
+                        .get(id)
+                        .ok_or_else(|| format!("unknown sampled texture {}", id.0))?;
+                    self.current_texture = Some(texture.clone());
                 }
                 Command::BindVertexBuffer { id, .. } => {
                     let buffer = self
@@ -141,7 +198,7 @@ impl GpuExecutor {
                         return Err("a render pass is already open".into());
                     }
                     let texture = self
-                        .textures
+                        .targets
                         .get(target)
                         .ok_or_else(|| format!("unknown render target {}", target.0))?
                         .clone();
@@ -199,6 +256,8 @@ impl GpuExecutor {
                     // pipeline vertex descriptor, and the range comes from the ABI.
                     unsafe {
                         encoder.setVertexBuffer_offset_atIndex(Some(buffer), 0, 0);
+                        let texture = self.current_texture.as_ref().unwrap_or(&self.white);
+                        encoder.setFragmentTexture_atIndex(Some(texture), 0);
                         encoder.drawPrimitives_vertexStart_vertexCount(
                             MTLPrimitiveType::Triangle,
                             *first as usize,
@@ -226,8 +285,9 @@ impl GpuExecutor {
     /// Returns an error for an unknown texture or an overflow in the readback size.
     pub fn read_texture(&self, id: ResourceId) -> Result<Image, String> {
         let texture = self
-            .textures
+            .targets
             .get(&id)
+            .or_else(|| self.sampled.get(&id))
             .ok_or_else(|| format!("unknown texture {}", id.0))?;
         let width = texture.width() as u32;
         let height = texture.height() as u32;
@@ -264,11 +324,35 @@ impl GpuExecutor {
     }
 }
 
+fn sampled_texture(
+    device: &ProtocolObject<dyn MTLDevice>,
+    width: u32,
+    height: u32,
+) -> Result<Retained<ProtocolObject<dyn MTLTexture>>, String> {
+    if width == 0 || height == 0 {
+        return Err("texture dimensions must be non-zero".into());
+    }
+    // SAFETY: valid pixel format and non-zero dimensions.
+    let descriptor = unsafe {
+        MTLTextureDescriptor::texture2DDescriptorWithPixelFormat_width_height_mipmapped(
+            MTLPixelFormat::RGBA8Unorm,
+            width as usize,
+            height as usize,
+            false,
+        )
+    };
+    descriptor.setUsage(MTLTextureUsage::ShaderRead);
+    descriptor.setStorageMode(MTLStorageMode::Shared);
+    device
+        .newTextureWithDescriptor(&descriptor)
+        .ok_or_else(|| "could not create the sampled texture".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::SceneVertex;
-    use jkva_gpu::{BufferUsage, Command, CommandList, TextureFormat};
+    use jkva_gpu::{BufferUsage, Command, CommandList, TextureFormat, TextureUsage};
 
     #[test]
     fn a_triangle_from_a_command_list_renders() {
@@ -316,6 +400,7 @@ mod tests {
             width: 8,
             height: 8,
             format: TextureFormat::Rgba8Unorm,
+            usage: TextureUsage::RenderTarget,
         });
         list.push(Command::BeginPass {
             target: ResourceId(2),
@@ -335,5 +420,87 @@ mod tests {
         executor.execute(&list).unwrap();
         let image = executor.read_texture(ResourceId(2)).unwrap();
         assert_eq!(image.pixel(4, 4), Some([255, 0, 0, 255]));
+    }
+
+    #[test]
+    fn a_bound_sampled_texture_tints_the_draw() {
+        let Ok(mut executor) = GpuExecutor::new() else {
+            return;
+        };
+        let vertices = [
+            SceneVertex {
+                position: [-1.0, -1.0],
+                uv: [0.0, 0.0],
+                color: [1.0, 1.0, 1.0, 1.0],
+            },
+            SceneVertex {
+                position: [3.0, -1.0],
+                uv: [1.0, 0.0],
+                color: [1.0, 1.0, 1.0, 1.0],
+            },
+            SceneVertex {
+                position: [-1.0, 3.0],
+                uv: [0.0, 1.0],
+                color: [1.0, 1.0, 1.0, 1.0],
+            },
+        ];
+        // SAFETY: SceneVertex is repr(C) and all fields are f32.
+        let bytes = unsafe {
+            std::slice::from_raw_parts(
+                vertices.as_ptr().cast::<u8>(),
+                std::mem::size_of_val(&vertices),
+            )
+        };
+        let mut list = CommandList::new();
+        list.push(Command::CreateBuffer {
+            id: ResourceId(1),
+            size: bytes.len() as u64,
+            usage: BufferUsage::Vertex,
+        });
+        list.push(Command::WriteBuffer {
+            id: ResourceId(1),
+            offset: 0,
+            data: bytes.to_vec(),
+        });
+        list.push(Command::CreateTexture {
+            id: ResourceId(2),
+            width: 1,
+            height: 1,
+            format: TextureFormat::Rgba8Unorm,
+            usage: TextureUsage::Sampled,
+        });
+        list.push(Command::WriteTexture {
+            id: ResourceId(2),
+            data: vec![0, 255, 0, 255],
+        });
+        list.push(Command::CreateTexture {
+            id: ResourceId(3),
+            width: 8,
+            height: 8,
+            format: TextureFormat::Rgba8Unorm,
+            usage: TextureUsage::RenderTarget,
+        });
+        list.push(Command::BeginPass {
+            target: ResourceId(3),
+            clear: [0.0, 0.0, 0.0, 1.0],
+        });
+        list.push(Command::BindVertexBuffer {
+            slot: 0,
+            id: ResourceId(1),
+        });
+        list.push(Command::BindTexture {
+            slot: 0,
+            id: ResourceId(2),
+        });
+        list.push(Command::Draw {
+            pipeline: 0,
+            first: 0,
+            vertices: 3,
+            instances: 1,
+        });
+        list.push(Command::EndPass);
+        executor.execute(&list).unwrap();
+        let image = executor.read_texture(ResourceId(3)).unwrap();
+        assert_eq!(image.pixel(4, 4), Some([0, 255, 0, 255]));
     }
 }

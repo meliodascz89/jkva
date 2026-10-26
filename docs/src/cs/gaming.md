@@ -94,7 +94,7 @@ Gate ukládá jen rozhodnutí. Nikdy neotevírá socket: `jkva-net` pořád odm�
 
 ABI už není jen papírový kontrakt: `jkva-gfx::GpuExecutor` vykonává validovaný `CommandList` na Metal — vytvoření a upload bufferu, render-target textury, jeden pass, bind vertex bufferu a draw. Test postaví trojúhelník celý přes ABI, vykoná ho, přečte target a zkontroluje červený pixel ve středu.
 
-Pipeline `0` je scénová pipeline (position/uv/rgba vrcholy vzorkované z 1×1 bílé textury). Bind textur, další pipelines, instancing a compute jsou další kroky; executor odmítne, co neumí, místo aby tiše nic nenakreslil.
+Pipeline `0` je scénová pipeline (position/uv/rgba vrcholy). Sampled textury jsou podporované: ABI umí texturu vytvořit, nahrát RGBA8 pixely a bindovat ji pro draw (protokol v3), a druhý test kreslí trojúhelník tónovaný nahranou zelenou texturou. Další pipelines, instancing a compute jsou další kroky; executor odmítne, co neumí, místo aby tiše nic nenakreslil.
 
 ## Stav
 

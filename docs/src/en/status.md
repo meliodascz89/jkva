@@ -60,6 +60,7 @@ What is done, what is verified, and what is deliberately not done yet. Every lin
 | Gamepad input over IPC v2 | done | `InputEvent::Gamepad` with buttons and axes |
 | GPU command ABI | done | `jkva-gpu`: typed commands, device limits, balanced passes, versioned frames, 7 tests |
 | Metal executor for the GPU ABI | done | `GpuExecutor` renders a triangle from a command list and reads it back |
+| Sampled textures in the ABI | done | create/upload/bind RGBA8, protocol v3, executor test |
 | Fixed-timestep frame pacing | done | `jkva-core::frame::FrameClock`: capped steps, interpolation alpha, rate change |
 | GPU capability probe | done | `jkva-gfx::capabilities()`: Apple M4, 13.6 GiB max buffer, 18.2 GiB working set, timestamp counters |
 | Frame-time benchmark | done | `tools/gfx-bench`: 4096 quads, 1080p, CPU submit p95 0.153 ms, GPU execution p95 1.221 ms |
