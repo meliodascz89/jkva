@@ -12,3 +12,7 @@ authors.workspace = true
 workspace = true
 
 [dependencies]
+tokio = { version = "1", features = ["net", "sync", "time"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["net", "rt", "macros", "sync", "time"] }
