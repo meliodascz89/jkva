@@ -1089,6 +1089,10 @@ enum PropertyId {
     AlignItems,
     Gap,
     AlignSelf,
+    FlexWrap,
+    FlexGrow,
+    FlexShrink,
+    FlexBasis,
     FontSize,
     FontWeight,
     FontFamily,
@@ -1096,7 +1100,7 @@ enum PropertyId {
 
 impl PropertyId {
     /// Number of tracked properties.
-    const COUNT: usize = 33;
+    const COUNT: usize = 37;
 
     /// Every tracked property, ordered by [`PropertyId::index`].
     const ALL: [Self; Self::COUNT] = [
@@ -1130,6 +1134,10 @@ impl PropertyId {
         Self::AlignItems,
         Self::Gap,
         Self::AlignSelf,
+        Self::FlexWrap,
+        Self::FlexGrow,
+        Self::FlexShrink,
+        Self::FlexBasis,
         Self::FontSize,
         Self::FontWeight,
         Self::FontFamily,
@@ -1168,9 +1176,13 @@ impl PropertyId {
             Self::AlignItems => 27,
             Self::Gap => 28,
             Self::AlignSelf => 29,
-            Self::FontSize => 30,
-            Self::FontWeight => 31,
-            Self::FontFamily => 32,
+            Self::FlexWrap => 30,
+            Self::FlexGrow => 31,
+            Self::FlexShrink => 32,
+            Self::FlexBasis => 33,
+            Self::FontSize => 34,
+            Self::FontWeight => 35,
+            Self::FontFamily => 36,
         }
     }
 
@@ -1209,6 +1221,10 @@ impl PropertyId {
             "align-items" => Self::AlignItems,
             "gap" => Self::Gap,
             "align-self" => Self::AlignSelf,
+            "flex-wrap" => Self::FlexWrap,
+            "flex-grow" => Self::FlexGrow,
+            "flex-shrink" => Self::FlexShrink,
+            "flex-basis" => Self::FlexBasis,
             "font-size" => Self::FontSize,
             "font-weight" => Self::FontWeight,
             "font-family" => Self::FontFamily,
@@ -1260,6 +1276,10 @@ impl PropertyId {
             Self::AlignItems => "stretch",
             Self::Gap => "0",
             Self::AlignSelf => "auto",
+            Self::FlexWrap => "nowrap",
+            Self::FlexGrow => "0",
+            Self::FlexShrink => "1",
+            Self::FlexBasis => "auto",
             // `medium` computes to 16px under default font settings; this crate
             // does not absolutise lengths, so the two spellings differ once a
             // document declares `font-size: medium` explicitly.
@@ -1316,6 +1336,10 @@ impl PropertyId {
             Self::AlignItems => &style.align_items,
             Self::Gap => &style.gap,
             Self::AlignSelf => &style.align_self,
+            Self::FlexWrap => &style.flex_wrap,
+            Self::FlexGrow => &style.flex_grow,
+            Self::FlexShrink => &style.flex_shrink,
+            Self::FlexBasis => &style.flex_basis,
             Self::FontSize => &style.font_size,
             Self::FontWeight => &style.font_weight,
             Self::FontFamily => &style.font_family,
@@ -1362,6 +1386,10 @@ impl PropertyId {
             Self::AlignItems => style.align_items = value.to_owned(),
             Self::Gap => style.gap = value.to_owned(),
             Self::AlignSelf => style.align_self = value.to_owned(),
+            Self::FlexWrap => style.flex_wrap = value.to_owned(),
+            Self::FlexGrow => style.flex_grow = value.to_owned(),
+            Self::FlexShrink => style.flex_shrink = value.to_owned(),
+            Self::FlexBasis => style.flex_basis = value.to_owned(),
             Self::FontSize => style.font_size = value.to_owned(),
             Self::FontWeight => style.font_weight = value.to_owned(),
             Self::FontFamily => style.font_family = value.to_owned(),
@@ -1432,6 +1460,10 @@ mod tests {
             PropertyId::AlignItems => "align-items",
             PropertyId::Gap => "gap",
             PropertyId::AlignSelf => "align-self",
+            PropertyId::FlexWrap => "flex-wrap",
+            PropertyId::FlexGrow => "flex-grow",
+            PropertyId::FlexShrink => "flex-shrink",
+            PropertyId::FlexBasis => "flex-basis",
             PropertyId::FontSize => "font-size",
             PropertyId::FontWeight => "font-weight",
             PropertyId::FontFamily => "font-family",

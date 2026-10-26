@@ -81,15 +81,19 @@
 //!   exceed the available width. Line height is `LINE_HEIGHT_FACTOR * font_size`
 //!   (`1.2em`), and lines stack. An inline element gets one box per line covering its
 //!   text on that line.
-//! * **Flex flow.** An element with `display: flex` is a block-level, single-line flex
-//!   container: `flex-direction: row | column`, `justify-content`
-//!   (`flex-start`, `flex-end`, `center`, `space-between`, `space-around`),
-//!   `align-items` (`stretch`, `flex-start`, `center`, `flex-end`) and one `gap` for
-//!   both axes. Its children are flex items; an inline child is blockified and each
-//!   bare text node child becomes its own anonymous item. Items without a declared
-//!   width are sized by the maximum width of their own inline content (a documented
-//!   approximation, see below), and `stretch` fills the line's cross size unless the
-//!   item declares a height.
+//! * **Flex flow.** An element with `display: flex` is a block-level flex container:
+//!   `flex-direction: row | column`, `justify-content` (`flex-start`, `flex-end`,
+//!   `center`, `space-between`, `space-around`), `align-items` (`stretch`,
+//!   `flex-start`, `center`, `flex-end`), `align-self`, one `gap` for both axes, and
+//!   `flex-wrap` / `flex-grow` / `flex-shrink` / `flex-basis` (see below). Its children
+//!   are flex items; an inline child is blockified and each bare text node child becomes
+//!   its own anonymous item. A row container breaks its items into lines when the next
+//!   outer base size plus the gap would not fit, each line is aligned and justified on
+//!   its own, and a line's free or missing space is distributed by the flex factors. A
+//!   column container is always single-line. Items without a basis or declared width are
+//!   sized by the maximum width of their own inline content (a documented approximation,
+//!   see below), and `stretch` fills the line's cross size unless the item declares a
+//!   height.
 //! * **`display: none`.** The element and its whole subtree produce no boxes.
 //!
 //! # Simplifications (deliberate, documented)
@@ -97,16 +101,22 @@
 //! These are the known gaps of the current model. They are listed here so that a reader
 //! can tell an unfinished feature from a bug.
 //!
-//! 1. **Flex is single-line and partial.** There is no wrapping, no `flex-grow`,
-//!    `flex-shrink` or `flex-basis`, no `order`, no `align-self`, no `align-content`,
-//!    no nested percentage basis and no automatic minimum size. `auto` margins on an
-//!    item resolve to `0.0` instead of absorbing free space. Items keep their source
-//!    order and never shrink, so an overflowing line simply overflows.
-//! 2. **Flex intrinsic sizing is a documented approximation.** An item without a
-//!    declared width is as wide as the longest line of its *own inline content*; block
-//!    descendants do not contribute, so an item whose content is only blocks collapses
-//!    to its padding and border. There is no `min-content`/`max-content` keyword, no
-//!    percentage measurement of the free space and no text-based minimum width.
+//! 1. **Flex wrapping and growing are row-only.** `flex-wrap`, `flex-grow` and
+//!    `flex-shrink` are not applied to a column container, which stays single-line with
+//!    its previous sizing; `flex-basis` is ignored there too, because a column's main
+//!    axis is vertical and there is no vertical measure pass yet. `order` and
+//!    `align-content` are absent, so multiple lines stack from the top and a declared
+//!    container height overflows instead of distributing the lines. `auto` margins on an
+//!    item resolve to `0.0` instead of absorbing free space.
+//! 2. **Flex sizes are approximations.** An item without a basis or declared width is as
+//!    wide as the longest line of its *own inline content*; block descendants do not
+//!    contribute, so an item whose content is only blocks collapses to its padding and
+//!    border. Line breaking uses the outer base sizes, so growing or shrinking an item
+//!    never moves it to another line. Shrinking is weighted by `flex-shrink × flex base
+//!    size` and clamps at a zero content width without redistributing the remainder (CSS
+//!    freezes such items and re-runs the distribution). There is no automatic minimum
+//!    size, no `min-content`/`max-content` keyword, no `flex` shorthand and no
+//!    text-based minimum width.
 //! 3. **`inline-flex` is not a flex container.** [`Display`] has no inline-level flex
 //!    variant; the engine maps `inline-flex` to [`Display::Inline`] today, so it is
 //!    flattened into the surrounding inline flow. Mapping it to [`Display::Flex`] would
@@ -167,7 +177,8 @@ pub mod tree;
 pub use engine::layout;
 pub use geometry::{Point, Rect, Size};
 pub use style::{
-    AlignItems, Display, Edges, FlexDirection, JustifyContent, Length, LengthEdges, StyleSource,
+    AlignItems, Display, Edges, FlexDirection, FlexWrap, JustifyContent, Length, LengthEdges,
+    StyleSource,
 };
 pub use text::{LINE_HEIGHT_FACTOR, TextMeasure, TextRun};
 pub use tree::{LayoutBox, LayoutTree, Viewport};

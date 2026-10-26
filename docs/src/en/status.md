@@ -44,7 +44,8 @@ What is done, what is verified, and what is deliberately not done yet. Every lin
 | Flex reachable from the engine | done | the shell maps `display: flex` to `Display::Flex` |
 | `align-self` per item | done | falls back to `align-items`; tested |
 | Corpus page with a golden | done | `examples/flex.html`, `examples/expected/flex.png` |
-| Wrap, grow/shrink/basis, order, align-self | not yet | next M2 increment |
+| Wrap, `flex-grow`/`shrink`/`basis` | done | row wrapping, grow/shrink distribution, basis, percentage basis |
+| `order`, `align-content`, column wrap, intrinsic min/max | not yet | next M2 increment |
 | Grid, tables, floats, images, scroll, hit testing, layers | not yet | M2 |
 
 ## Gaming platform (ADR-026)

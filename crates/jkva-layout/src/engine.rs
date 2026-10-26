@@ -25,21 +25,30 @@
 //!
 //! # Flex
 //!
-//! A flex container ([`Display::Flex`], a block-level box) lays its children out as a
-//! single line of items. The modelled subset is `flex-direction: row | column`,
-//! `justify-content` (five values), `align-items` (four values) and one `gap` for both
-//! axes. Items are laid out in two steps: a *measurement pass* places every item at the
-//! container's content origin with the width the algorithm gives it, then positions are
-//! computed from the item sizes and each item's subtree is translated into place. There
-//! is no second layout pass, because block content in this milestone does not depend on
-//! its box height: `align-items: stretch` can therefore patch the used height of a row
-//! item after its content has been laid out.
+//! A flex container ([`Display::Flex`], a block-level box) lays its children out as lines
+//! of items. The modelled subset is `flex-direction: row | column`, `justify-content`
+//! (five values), `align-items` (four values), `align-self`, one `gap` for both axes,
+//! `flex-wrap: nowrap | wrap`, and the `flex-grow` / `flex-shrink` / `flex-basis` factors.
 //!
-//! Items are block-level children; an inline child is **blockified** (laid out as a
-//! block item, which is what CSS does for flex items), and each bare text node child
-//! becomes its own anonymous item. An item without a declared width is sized by a
-//! documented max-content approximation: the widest line of its own inline content,
-//! measured with [`TextMeasure`]; block-level descendants do not contribute to it.
+//! The item's **flex base size** is `flex-basis` when it resolves, else the declared
+//! width, else a documented max-content approximation: the widest line of the item's own
+//! inline content, measured with [`TextMeasure`]; block-level descendants do not
+//! contribute to it. A row container then breaks the items into lines greedily on their
+//! outer base sizes and the gap, and each line's free space (or deficit) is distributed by
+//! `flex-grow` (proportional to the grow factor) or `flex-shrink` (proportional to
+//! shrink × base size, clamped at a zero content width). Growing and shrinking never move
+//! an item to another line.
+//!
+//! Items are laid out once, at the container's content origin, with the final width the
+//! distribution produced; each subtree is then translated into its line. There is no
+//! second layout pass, because block content in this milestone does not depend on its box
+//! height, so `align-items: stretch` can patch the used height of a row item afterwards.
+//!
+//! A column container is single-line and ignores `flex-wrap`, `flex-basis` and the flex
+//! factors: its main axis is vertical and there is no vertical measure pass yet. Items are
+//! block-level children; an inline child is **blockified** (laid out as a block item,
+//! which is what CSS does for flex items), and each bare text node child becomes its own
+//! anonymous item with `flex: 0 1 auto` semantics.
 //!
 //! # Vertical margins
 //!
@@ -61,7 +70,7 @@ use jkva_dom::{Document, NodeId, NodeKind};
 
 use crate::geometry::{Point, Rect};
 use crate::style::{
-    AlignItems, Display, Edges, FlexDirection, JustifyContent, Length, StyleSource,
+    AlignItems, Display, Edges, FlexDirection, FlexWrap, JustifyContent, Length, StyleSource,
 };
 use crate::text::{LINE_HEIGHT_FACTOR, TextMeasure, TextRun};
 use crate::tree::{LayoutBox, LayoutTree, Viewport};
@@ -330,17 +339,27 @@ struct FlexNode {
     anonymous_text: bool,
 }
 
-/// One flex item after the measurement pass.
+/// One flex item after its base size has been resolved.
 struct FlexItem {
+    /// `true` for the anonymous item wrapped around a bare text node.
+    anonymous_text: bool,
     /// Used margins, resolved against the container's content width.
     margin: Edges,
     /// Resolved padding.
     padding: Edges,
     /// Resolved border widths.
     border: Edges,
-    /// Content width the flex algorithm decided for the item.
+    /// Flex base content width: `flex-basis`, else the declared width, else the
+    /// max-content approximation.
+    base_content_width: f32,
+    /// Content width after `flex-grow` / `flex-shrink` (row) or the decided cross width
+    /// (column).
     content_width: f32,
-    /// Border-box height produced by the measurement layout (or by `stretch`).
+    /// `flex-grow` factor, clamped to zero.
+    grow: f32,
+    /// `flex-shrink` factor, clamped to zero.
+    shrink: f32,
+    /// Border-box height produced by the layout pass (or by `stretch`).
     border_height: f32,
     /// Index of the item's own box, and so the first box of its subtree.
     start: usize,
@@ -355,7 +374,7 @@ struct FlexItem {
 }
 
 impl FlexItem {
-    /// Outer (margin-box) width of the item.
+    /// Outer (margin-box) width of the item after grow/shrink.
     fn outer_width(&self) -> f32 {
         self.margin.horizontal()
             + self.padding.horizontal()
@@ -363,9 +382,159 @@ impl FlexItem {
             + self.content_width
     }
 
+    /// Outer (margin-box) width of the item at its flex base size.
+    ///
+    /// Line breaking uses this, so `flex-grow` and `flex-shrink` cannot move an item to
+    /// another line.
+    fn outer_base_width(&self) -> f32 {
+        self.margin.horizontal()
+            + self.padding.horizontal()
+            + self.border.horizontal()
+            + self.base_content_width
+    }
+
     /// Outer (margin-box) height of the item.
     fn outer_height(&self) -> f32 {
         self.margin.vertical() + self.border_height
+    }
+}
+
+/// One line of a flex container.
+#[derive(Debug, Default)]
+struct FlexLine {
+    /// Indices of the items on the line, in source order.
+    items: Vec<usize>,
+    /// Cross size of the line, known after the items have been laid out.
+    cross_size: f32,
+}
+
+/// The outer main-axis size of an item.
+fn main_outer(item: &FlexItem, direction: FlexDirection) -> f32 {
+    match direction {
+        FlexDirection::Row => item.outer_width(),
+        FlexDirection::Column => item.outer_height(),
+    }
+}
+
+/// The outer cross-axis size of an item.
+fn cross_outer(item: &FlexItem, direction: FlexDirection) -> f32 {
+    match direction {
+        FlexDirection::Row => item.outer_height(),
+        FlexDirection::Column => item.outer_width(),
+    }
+}
+
+/// Breaks the items of a flex container into lines.
+///
+/// Greedy on the outer **base** sizes plus the gap: an item joins the current line while
+/// its outer base size still fits the container's content width, and an item that does
+/// not fit alone still gets its own line and overflows it. Only a row container wraps; a
+/// column container always produces one line.
+fn flex_lines(
+    items: &[FlexItem],
+    direction: FlexDirection,
+    wrap: FlexWrap,
+    gap: f32,
+    available: f32,
+) -> Vec<FlexLine> {
+    let wraps = direction == FlexDirection::Row && wrap == FlexWrap::Wrap;
+    let mut lines: Vec<FlexLine> = Vec::new();
+    let mut line = FlexLine::default();
+    let mut used = 0.0;
+    for (index, item) in items.iter().enumerate() {
+        let outer = item.outer_base_width();
+        if wraps && !line.items.is_empty() && used + gap + outer > available {
+            lines.push(std::mem::take(&mut line));
+            used = 0.0;
+        }
+        if !line.items.is_empty() {
+            used += gap;
+        }
+        used += outer;
+        line.items.push(index);
+    }
+    if !line.items.is_empty() {
+        lines.push(line);
+    }
+    lines
+}
+
+/// Distributes one line's free or missing main-axis space over its items.
+///
+/// Positive free space is shared in proportion to `flex-grow`; a line with no growing
+/// items keeps its base sizes (which is the plain `justify-content` case). An overflowing
+/// line shrinks its items in proportion to `flex-shrink * flex base size`, and a content
+/// width never drops below zero. Items never change line as a result: the breaks were
+/// chosen from the base sizes.
+fn resolve_flexible_main_sizes(
+    items: &mut [FlexItem],
+    lines: &[FlexLine],
+    gap: f32,
+    available: f32,
+) {
+    for line in lines {
+        let gaps = gap * (line.items.len().saturating_sub(1)) as f32;
+        let base_sum: f32 = line
+            .items
+            .iter()
+            .map(|index| items[*index].outer_base_width())
+            .sum();
+        let free = available - base_sum - gaps;
+        if free > 0.0 {
+            let grow_sum: f32 = line.items.iter().map(|index| items[*index].grow).sum();
+            if grow_sum > 0.0 {
+                for index in &line.items {
+                    let item = &mut items[*index];
+                    item.content_width += free * item.grow / grow_sum;
+                }
+            }
+        } else if free < 0.0 {
+            let deficit = -free;
+            let weight_sum: f32 = line
+                .items
+                .iter()
+                .map(|index| items[*index].shrink * items[*index].base_content_width)
+                .sum();
+            if weight_sum > 0.0 {
+                for index in &line.items {
+                    let item = &mut items[*index];
+                    let share = deficit * (item.shrink * item.base_content_width) / weight_sum;
+                    item.content_width = finite_non_negative(item.content_width - share);
+                }
+            }
+        }
+    }
+}
+
+/// Sets the cross size of every flex line.
+///
+/// A row's line is as tall as its tallest item (margin box included). A declared
+/// container height makes a single line definite, which is how `align-items: stretch`
+/// fills the container; with several lines the declared height is not distributed,
+/// because `align-content` is not implemented, so the lines keep their content heights
+/// and the container overflows. A column's cross axis is the container content width.
+fn size_flex_lines(
+    items: &[FlexItem],
+    lines: &mut [FlexLine],
+    direction: FlexDirection,
+    definite_height: Option<f32>,
+    container_width: f32,
+) {
+    let single_line_height = if lines.len() <= 1 {
+        definite_height
+    } else {
+        None
+    };
+    for line in lines.iter_mut() {
+        line.cross_size = finite_non_negative(match direction {
+            FlexDirection::Row => single_line_height.unwrap_or_else(|| {
+                line.items
+                    .iter()
+                    .map(|index| items[*index].outer_height())
+                    .fold(0.0, f32::max)
+            }),
+            FlexDirection::Column => container_width,
+        });
     }
 }
 
@@ -674,15 +843,20 @@ impl Layouter<'_> {
 
     /// Lays out the children of a flex container and returns `(children, used height)`.
     ///
-    /// One line, no wrapping: the main axis is horizontal for
-    /// [`FlexDirection::Row`] and vertical for [`FlexDirection::Column`]. `definite_height`
-    /// is the container's declared content height, which makes the cross size of a row
-    /// container (and the main size of a column container) definite.
+    /// The main axis is horizontal for [`FlexDirection::Row`] and vertical for
+    /// [`FlexDirection::Column`]. `definite_height` is the container's declared content
+    /// height; it makes the cross size of a single-line row container and the main size of
+    /// a column container definite.
     ///
-    /// Items are laid out once, at the container's content origin, and then translated
-    /// into place. That is sound because block content in this milestone does not depend
-    /// on its box height, so the measurement layout produces the same children wherever
-    /// the item ends up.
+    /// A row container may wrap onto several lines (`flex-wrap: wrap`); a column
+    /// container never wraps (documented simplification). On a row, `flex-grow` and
+    /// `flex-shrink` redistribute each line's free or missing space after the line breaks
+    /// are chosen, so every item is laid out exactly once with its final width.
+    ///
+    /// Items are laid out at the container's content origin and then translated into
+    /// place. That is sound because block content in this milestone does not depend on its
+    /// box height, so the layout produces the same children wherever the item ends up;
+    /// `align-items: stretch` patches the used height afterwards.
     fn layout_flex_content(
         &mut self,
         node: NodeId,
@@ -693,6 +867,7 @@ impl Layouter<'_> {
         let direction = self.styles.flex_direction(node);
         let justify = self.styles.justify_content(node);
         let align = self.styles.align_items(node);
+        let wrap = self.styles.flex_wrap(node);
         let gap = finite_non_negative(self.styles.gap(node));
 
         let mut nodes = Vec::new();
@@ -701,9 +876,133 @@ impl Layouter<'_> {
             return (Vec::new(), 0.0);
         }
 
-        let mut items: Vec<FlexItem> = Vec::with_capacity(nodes.len());
-        for flex_node in &nodes {
-            let (margin, padding, border) = if flex_node.anonymous_text {
+        let mut items = self.measure_flex_items(&nodes, direction, align, containing);
+        let mut lines = flex_lines(&items, direction, wrap, gap, containing.width);
+        if direction == FlexDirection::Row {
+            resolve_flexible_main_sizes(&mut items, &lines, gap, containing.width);
+        }
+        self.layout_flex_items(&mut items, &nodes, containing, top);
+        size_flex_lines(
+            &items,
+            &mut lines,
+            direction,
+            definite_height,
+            containing.width,
+        );
+
+        let mut children = Vec::with_capacity(items.len());
+        let mut cross_cursor = top;
+        for line in &lines {
+            let count = line.items.len();
+            let gaps = gap * (count.saturating_sub(1)) as f32;
+            let main_extent: f32 = line
+                .items
+                .iter()
+                .map(|index| main_outer(&items[*index], direction))
+                .sum();
+            let main_size = match direction {
+                FlexDirection::Row => containing.width,
+                // A column without a declared height is sized by its content, so
+                // `justify-content` has no free space to distribute.
+                FlexDirection::Column => {
+                    finite_non_negative(definite_height.unwrap_or(main_extent + gaps))
+                }
+            };
+            let free = finite_non_negative(main_size - main_extent - gaps);
+            let (leading, between) = justify_offsets(justify, free, count);
+            let mut cursor = match direction {
+                FlexDirection::Row => containing.x,
+                FlexDirection::Column => top,
+            } + leading;
+            for index in &line.items {
+                let item = &mut items[*index];
+                if direction == FlexDirection::Row
+                    && item.align == AlignItems::Stretch
+                    && !item.height_declared
+                {
+                    let forced = finite_non_negative(
+                        line.cross_size
+                            - item.margin.vertical()
+                            - item.padding.vertical()
+                            - item.border.vertical(),
+                    );
+                    item.forced_height = Some(forced);
+                    item.border_height = forced + item.padding.vertical() + item.border.vertical();
+                }
+                let outer_main = main_outer(item, direction);
+                let outer_cross = cross_outer(item, direction);
+                let offset = match item.align {
+                    AlignItems::FlexStart | AlignItems::Stretch => 0.0,
+                    AlignItems::Center => (line.cross_size - outer_cross) / 2.0,
+                    AlignItems::FlexEnd => line.cross_size - outer_cross,
+                };
+                let main_start = cursor
+                    + match direction {
+                        FlexDirection::Row => item.margin.left,
+                        FlexDirection::Column => item.margin.top,
+                    };
+                let cross_start = match direction {
+                    FlexDirection::Row => cross_cursor,
+                    FlexDirection::Column => containing.x,
+                } + offset
+                    + match direction {
+                        FlexDirection::Row => item.margin.top,
+                        FlexDirection::Column => item.margin.left,
+                    };
+                if let Some(forced) = item.forced_height {
+                    let boxed = &mut self.boxes[item.start];
+                    let rect = boxed.rect;
+                    let content = boxed.content;
+                    let border_height = forced + item.padding.vertical() + item.border.vertical();
+                    boxed.rect =
+                        Rect::new(rect.origin.x, rect.origin.y, rect.size.w, border_height);
+                    boxed.content =
+                        Rect::new(content.origin.x, content.origin.y, content.size.w, forced);
+                }
+                let (planned_x, planned_y) = match direction {
+                    FlexDirection::Row => (main_start, cross_start),
+                    FlexDirection::Column => (cross_start, main_start),
+                };
+                self.translate_subtree(
+                    item.start..item.end,
+                    planned_x - (containing.x + item.margin.left),
+                    planned_y - top,
+                );
+                children.push(item.start);
+                cursor += outer_main + gap + between;
+            }
+            cross_cursor += line.cross_size + gap;
+        }
+
+        let used_height = match direction {
+            FlexDirection::Row => {
+                let crosses: f32 = lines.iter().map(|line| line.cross_size).sum();
+                crosses + gap * (lines.len().saturating_sub(1)) as f32
+            }
+            FlexDirection::Column => {
+                let extent: f32 = items.iter().map(FlexItem::outer_height).sum::<f32>()
+                    + gap * (items.len().saturating_sub(1)) as f32;
+                finite_non_negative(definite_height.unwrap_or(extent))
+            }
+        };
+        (children, used_height)
+    }
+
+    /// Resolves the flex base size and the flex factors of every item.
+    ///
+    /// Nothing is laid out here: the base sizes decide the line breaks and the space
+    /// distribution, and the boxes are built afterwards, once the final widths are known.
+    fn measure_flex_items(
+        &mut self,
+        nodes: &[FlexNode],
+        direction: FlexDirection,
+        align: AlignItems,
+        containing: ContainingBlock,
+    ) -> Vec<FlexItem> {
+        let mut items = Vec::with_capacity(nodes.len());
+        for flex_node in nodes {
+            let anonymous = flex_node.anonymous_text;
+            let (margin, padding, border) = if anonymous {
                 // An anonymous item is a bare text run: it has no box decorations.
                 (Edges::ZERO, Edges::ZERO, Edges::ZERO)
             } else {
@@ -719,44 +1018,103 @@ impl Layouter<'_> {
                     self.styles.border(flex_node.node).clamped(),
                 )
             };
-            let declared_width = if flex_node.anonymous_text {
+            let declared_width = if anonymous {
                 None
             } else {
                 self.styles
                     .width(flex_node.node)
                     .resolve(Some(containing.width))
             };
-            let declared_height = if flex_node.anonymous_text {
+            let declared_height = if anonymous {
                 None
             } else {
                 self.styles.height(flex_node.node).resolve(None)
             };
-            // A declared width wins. Otherwise a row item is sized to its max-content
-            // approximation, and a column item stretches to the line unless the cross
-            // axis is aligned instead of stretched.
-            let item_align = self.styles.align_self(flex_node.node).unwrap_or(align);
-            let content_width = match (direction, declared_width, item_align) {
-                (_, Some(width), _) => width,
-                (FlexDirection::Row, None, _) => {
-                    self.max_content_width(flex_node.node, flex_node.anonymous_text)
+            let item_align = if anonymous {
+                align
+            } else {
+                self.styles.align_self(flex_node.node).unwrap_or(align)
+            };
+            let (grow, shrink) = if anonymous {
+                // An anonymous item behaves like `flex: 0 1 auto`.
+                (0.0, 1.0)
+            } else {
+                (
+                    finite_non_negative(self.styles.flex_grow(flex_node.node)),
+                    finite_non_negative(self.styles.flex_shrink(flex_node.node)),
+                )
+            };
+            let basis = if anonymous {
+                None
+            } else {
+                self.styles
+                    .flex_basis(flex_node.node)
+                    .resolve(Some(containing.width))
+            };
+            let (base_content_width, content_width) = match direction {
+                FlexDirection::Row => {
+                    let base = basis
+                        .or(declared_width)
+                        .unwrap_or_else(|| self.max_content_width(flex_node.node, anonymous));
+                    (base, base)
                 }
-                (FlexDirection::Column, None, AlignItems::Stretch) => finite_non_negative(
-                    containing.width
-                        - margin.horizontal()
-                        - padding.horizontal()
-                        - border.horizontal(),
-                ),
-                (FlexDirection::Column, None, _) => {
-                    self.max_content_width(flex_node.node, flex_node.anonymous_text)
+                FlexDirection::Column => {
+                    // The column main axis is vertical, so `flex-basis` and the flex
+                    // factors are not implemented there; the cross size is decided as
+                    // before.
+                    let width = match (declared_width, item_align) {
+                        (Some(width), _) => width,
+                        (None, AlignItems::Stretch) => finite_non_negative(
+                            containing.width
+                                - margin.horizontal()
+                                - padding.horizontal()
+                                - border.horizontal(),
+                        ),
+                        (None, _) => self.max_content_width(flex_node.node, anonymous),
+                    };
+                    (width, width)
                 }
             };
+            items.push(FlexItem {
+                anonymous_text: anonymous,
+                margin,
+                padding,
+                border,
+                base_content_width,
+                content_width,
+                grow,
+                shrink,
+                border_height: 0.0,
+                start: 0,
+                end: 0,
+                height_declared: declared_height.is_some(),
+                forced_height: None,
+                align: item_align,
+            });
+        }
+        items
+    }
+
+    /// Lays out every flex item at the container's content origin.
+    ///
+    /// The positions are provisional; [`Layouter::translate_subtree`] moves each item into
+    /// its line afterwards. Items are laid out in source order, so the child indices stay
+    /// in paint order.
+    fn layout_flex_items(
+        &mut self,
+        items: &mut [FlexItem],
+        nodes: &[FlexNode],
+        containing: ContainingBlock,
+        top: f32,
+    ) {
+        for (item, flex_node) in items.iter_mut().zip(nodes) {
             let start = self.boxes.len();
-            let metrics = if flex_node.anonymous_text {
+            let metrics = if item.anonymous_text {
                 self.layout_text_item(
                     flex_node.node,
                     ContainingBlock {
                         x: containing.x,
-                        width: content_width,
+                        width: item.content_width,
                     },
                     top,
                 )
@@ -764,138 +1122,21 @@ impl Layouter<'_> {
                 self.layout_block_box(
                     flex_node.node,
                     BlockBox {
-                        border_x: containing.x + margin.left,
+                        border_x: containing.x + item.margin.left,
                         y: top,
-                        border_box_width: content_width
-                            + padding.horizontal()
-                            + border.horizontal(),
-                        padding,
-                        border,
+                        border_box_width: item.content_width
+                            + item.padding.horizontal()
+                            + item.border.horizontal(),
+                        padding: item.padding,
+                        border: item.border,
                         forced_content_height: None,
                     },
                 )
             };
-            items.push(FlexItem {
-                margin,
-                padding,
-                border,
-                content_width,
-                border_height: metrics.border_height,
-                start,
-                end: self.boxes.len(),
-                height_declared: declared_height.is_some(),
-                forced_height: None,
-                align: item_align,
-            });
+            item.start = start;
+            item.end = self.boxes.len();
+            item.border_height = metrics.border_height;
         }
-
-        // The line's cross size: a declared height makes it definite for a row, and a
-        // column's cross axis is the container's content width, which is always definite.
-        let line_cross = finite_non_negative(match direction {
-            FlexDirection::Row => definite_height
-                .unwrap_or_else(|| items.iter().map(FlexItem::outer_height).fold(0.0, f32::max)),
-            FlexDirection::Column => containing.width,
-        });
-
-        // `stretch` gives an item without a declared height the line's cross size. The
-        // block content has already been laid out from the item's content top, so
-        // growing the box afterwards only moves its bottom edge.
-        if direction == FlexDirection::Row {
-            for item in &mut items {
-                if item.height_declared || item.align != AlignItems::Stretch {
-                    continue;
-                }
-                let target = finite_non_negative(
-                    line_cross
-                        - item.margin.vertical()
-                        - item.padding.vertical()
-                        - item.border.vertical(),
-                );
-                item.forced_height = Some(target);
-                item.border_height = target + item.padding.vertical() + item.border.vertical();
-            }
-        }
-
-        let sum_main: f32 = items
-            .iter()
-            .map(|item| match direction {
-                FlexDirection::Row => item.outer_width(),
-                FlexDirection::Column => item.outer_height(),
-            })
-            .sum();
-        let gaps = gap * (items.len().saturating_sub(1)) as f32;
-        let main_size = match direction {
-            FlexDirection::Row => containing.width,
-            // A column without a declared height is sized by its content, so there is
-            // no free space for `justify-content` to distribute.
-            FlexDirection::Column => definite_height.unwrap_or(sum_main + gaps),
-        };
-        let free = finite_non_negative(main_size - sum_main - gaps);
-        let (leading, between) = justify_offsets(justify, free, items.len());
-
-        let mut children = Vec::with_capacity(items.len());
-        let mut cursor = match direction {
-            FlexDirection::Row => containing.x,
-            FlexDirection::Column => top,
-        } + leading;
-        for item in &items {
-            if let Some(forced) = item.forced_height {
-                let boxed = &mut self.boxes[item.start];
-                let rect = boxed.rect;
-                let content = boxed.content;
-                boxed.rect = Rect::new(
-                    rect.origin.x,
-                    rect.origin.y,
-                    rect.size.w,
-                    forced + item.padding.vertical() + item.border.vertical(),
-                );
-                boxed.content =
-                    Rect::new(content.origin.x, content.origin.y, content.size.w, forced);
-            }
-            let outer_main = match direction {
-                FlexDirection::Row => item.outer_width(),
-                FlexDirection::Column => item.outer_height(),
-            };
-            let outer_cross = match direction {
-                FlexDirection::Row => item.outer_height(),
-                FlexDirection::Column => item.outer_width(),
-            };
-            let offset = match item.align {
-                AlignItems::FlexStart | AlignItems::Stretch => 0.0,
-                AlignItems::Center => (line_cross - outer_cross) / 2.0,
-                AlignItems::FlexEnd => line_cross - outer_cross,
-            };
-            let main_start = cursor
-                + match direction {
-                    FlexDirection::Row => item.margin.left,
-                    FlexDirection::Column => item.margin.top,
-                };
-            let cross_start = match direction {
-                FlexDirection::Row => top,
-                FlexDirection::Column => containing.x,
-            } + offset
-                + match direction {
-                    FlexDirection::Row => item.margin.top,
-                    FlexDirection::Column => item.margin.left,
-                };
-            let (planned_x, planned_y) = match direction {
-                FlexDirection::Row => (main_start, cross_start),
-                FlexDirection::Column => (cross_start, main_start),
-            };
-            self.translate_subtree(
-                item.start..item.end,
-                planned_x - (containing.x + item.margin.left),
-                planned_y - top,
-            );
-            children.push(item.start);
-            cursor += outer_main + gap + between;
-        }
-
-        let used_height = match direction {
-            FlexDirection::Row => line_cross,
-            FlexDirection::Column => definite_height.unwrap_or(sum_main + gaps),
-        };
-        (children, used_height)
     }
 
     /// Collects the flex items of a container, flattening document fragments.
@@ -1558,5 +1799,105 @@ mod tests {
                 .iter()
                 .any(|item| matches!(item, Flow::Text { node, .. } if *node == hidden_text))
         );
+    }
+
+    /// A flex item with no box decorations and a fixed content height, for the pure
+    /// line and space helpers.
+    fn plain_item(base_content_width: f32) -> FlexItem {
+        FlexItem {
+            anonymous_text: false,
+            margin: Edges::ZERO,
+            padding: Edges::ZERO,
+            border: Edges::ZERO,
+            base_content_width,
+            content_width: base_content_width,
+            grow: 0.0,
+            shrink: 1.0,
+            border_height: 10.0,
+            start: 0,
+            end: 0,
+            height_declared: true,
+            forced_height: None,
+            align: AlignItems::FlexStart,
+        }
+    }
+
+    #[test]
+    fn flex_lines_break_on_the_next_outer_size() {
+        let items = vec![plain_item(40.0), plain_item(40.0), plain_item(40.0)];
+        let lines = flex_lines(&items, FlexDirection::Row, FlexWrap::Wrap, 10.0, 100.0);
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0].items, vec![0, 1]);
+        assert_eq!(lines[1].items, vec![2]);
+        // An item that does not fit even on an empty line still gets its own line.
+        let wide = vec![plain_item(150.0), plain_item(10.0)];
+        let lines = flex_lines(&wide, FlexDirection::Row, FlexWrap::Wrap, 0.0, 100.0);
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0].items, vec![0]);
+        assert_eq!(lines[1].items, vec![1]);
+    }
+
+    #[test]
+    fn flex_lines_keep_one_line_without_wrap() {
+        let items = vec![plain_item(40.0), plain_item(40.0), plain_item(40.0)];
+        let lines = flex_lines(&items, FlexDirection::Row, FlexWrap::NoWrap, 10.0, 100.0);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].items, vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn flex_lines_ignore_wrap_for_a_column() {
+        let items = vec![plain_item(40.0), plain_item(40.0), plain_item(40.0)];
+        let lines = flex_lines(&items, FlexDirection::Column, FlexWrap::Wrap, 10.0, 100.0);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].items, vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn grow_distributes_the_free_space() {
+        let mut items = vec![plain_item(20.0), plain_item(20.0)];
+        for item in &mut items {
+            item.grow = 1.0;
+        }
+        let lines = flex_lines(&items, FlexDirection::Row, FlexWrap::NoWrap, 0.0, 100.0);
+        resolve_flexible_main_sizes(&mut items, &lines, 0.0, 100.0);
+        assert!((items[0].content_width - 50.0).abs() < 1.0e-4);
+        assert!((items[1].content_width - 50.0).abs() < 1.0e-4);
+    }
+
+    #[test]
+    fn shrink_is_weighted_by_the_base_size() {
+        let mut items = vec![plain_item(80.0), plain_item(20.0)];
+        let lines = flex_lines(&items, FlexDirection::Row, FlexWrap::NoWrap, 0.0, 60.0);
+        resolve_flexible_main_sizes(&mut items, &lines, 0.0, 60.0);
+        // 40px of deficit over weights 80 and 20: 32 and 8 are removed.
+        assert!((items[0].content_width - 48.0).abs() < 1.0e-4);
+        assert!((items[1].content_width - 12.0).abs() < 1.0e-4);
+    }
+
+    #[test]
+    fn shrink_does_not_go_below_zero() {
+        let mut items = vec![plain_item(10.0), plain_item(10.0)];
+        let lines = flex_lines(&items, FlexDirection::Row, FlexWrap::NoWrap, 0.0, 0.0);
+        resolve_flexible_main_sizes(&mut items, &lines, 0.0, 0.0);
+        assert_eq!(items[0].content_width, 0.0);
+        assert_eq!(items[1].content_width, 0.0);
+    }
+
+    #[test]
+    fn line_cross_sizes_use_the_tallest_item() {
+        let mut items = vec![plain_item(10.0), plain_item(10.0)];
+        items[0].border_height = 10.0;
+        items[1].border_height = 30.0;
+        let mut lines = flex_lines(&items, FlexDirection::Row, FlexWrap::NoWrap, 0.0, 100.0);
+        size_flex_lines(&items, &mut lines, FlexDirection::Row, None, 100.0);
+        assert_eq!(lines[0].cross_size, 30.0);
+        // A declared container height makes a single line definite.
+        size_flex_lines(&items, &mut lines, FlexDirection::Row, Some(100.0), 100.0);
+        assert_eq!(lines[0].cross_size, 100.0);
+        // A column's cross axis is the container content width.
+        let mut column = flex_lines(&items, FlexDirection::Column, FlexWrap::NoWrap, 0.0, 100.0);
+        size_flex_lines(&items, &mut column, FlexDirection::Column, None, 80.0);
+        assert_eq!(column[0].cross_size, 80.0);
     }
 }

@@ -11,8 +11,8 @@ use std::collections::HashMap;
 
 use jkva_dom::{Document, NodeId, parse_document};
 use jkva_layout::{
-    AlignItems, Display, Edges, FlexDirection, JustifyContent, LayoutBox, LayoutTree, Length,
-    LengthEdges, Rect, StyleSource, TextMeasure, TextRun, Viewport, layout,
+    AlignItems, Display, Edges, FlexDirection, FlexWrap, JustifyContent, LayoutBox, LayoutTree,
+    Length, LengthEdges, Rect, StyleSource, TextMeasure, TextRun, Viewport, layout,
 };
 
 const BLACK: [u8; 4] = [0, 0, 0, 255];
@@ -34,6 +34,10 @@ struct NodeStyle {
     align_items: AlignItems,
     gap: f32,
     align_self: Option<AlignItems>,
+    flex_wrap: FlexWrap,
+    flex_grow: f32,
+    flex_shrink: f32,
+    flex_basis: Length,
 }
 
 impl NodeStyle {
@@ -53,6 +57,10 @@ impl NodeStyle {
         align_items: AlignItems::Stretch,
         gap: 0.0,
         align_self: None,
+        flex_wrap: FlexWrap::NoWrap,
+        flex_grow: 0.0,
+        flex_shrink: 1.0,
+        flex_basis: Length::Auto,
     };
 
     /// An inline element: flattened by layout, so only text properties matter.
@@ -142,6 +150,26 @@ impl NodeStyle {
         self.gap = gap;
         self
     }
+
+    fn with_wrap(mut self) -> Self {
+        self.flex_wrap = FlexWrap::Wrap;
+        self
+    }
+
+    fn with_grow(mut self, grow: f32) -> Self {
+        self.flex_grow = grow;
+        self
+    }
+
+    fn with_shrink(mut self, shrink: f32) -> Self {
+        self.flex_shrink = shrink;
+        self
+    }
+
+    fn with_basis(mut self, basis: Length) -> Self {
+        self.flex_basis = basis;
+        self
+    }
 }
 
 /// A style source whose answers are a map, with a block default.
@@ -219,6 +247,22 @@ impl StyleSource for MockStyles {
 
     fn align_self(&self, node: NodeId) -> Option<AlignItems> {
         self.get(node).align_self
+    }
+
+    fn flex_wrap(&self, node: NodeId) -> FlexWrap {
+        self.get(node).flex_wrap
+    }
+
+    fn flex_grow(&self, node: NodeId) -> f32 {
+        self.get(node).flex_grow
+    }
+
+    fn flex_shrink(&self, node: NodeId) -> f32 {
+        self.get(node).flex_shrink
+    }
+
+    fn flex_basis(&self, node: NodeId) -> Length {
+        self.get(node).flex_basis
     }
 }
 
@@ -1116,7 +1160,7 @@ fn flex_items_respect_margin_padding_and_border() {
 }
 
 #[test]
-fn a_flex_row_does_not_wrap_and_overflows_instead() {
+fn a_flex_row_without_wrap_shrinks_instead_of_wrapping() {
     let mut document = Document::new();
     let body = body_element(&mut document);
     let container = element(&mut document, body, "div");
@@ -1128,10 +1172,15 @@ fn a_flex_row_does_not_wrap_and_overflows_instead() {
     for item in &items {
         styles.set(*item, NodeStyle::BLOCK.with_width(50.0).with_height(10.0));
     }
-    // A 100px viewport gives the container a 100px content width; 3*50 overflows it.
+    // A 100px container cannot hold three 50px items and `flex-shrink` defaults to 1,
+    // so the items shrink to a third of the line instead of wrapping.
     let tree = layout_with(&document, &styles, 100.0, 600.0);
 
-    assert_positions(xs(&tree, &items), &[0.0, 50.0, 100.0]);
+    let third = 100.0 / 3.0;
+    assert_positions(xs(&tree, &items), &[0.0, third, 2.0 * third]);
+    for item in &items {
+        assert_close(box_of(&tree, *item).rect.width(), third);
+    }
     assert_close(box_of(&tree, container).content.height(), 10.0);
 }
 
@@ -1271,4 +1320,309 @@ fn align_items_stretch_fills_a_definite_cross_size() {
     assert_close(box_of(&tree, item).rect.height(), 100.0);
     assert_close(box_of(&tree, item).content.height(), 100.0);
     assert_close(box_of(&tree, container).content.height(), 100.0);
+}
+
+// ---------------------------------------------------------------------------
+// Flex lines, grow, shrink and basis
+// ---------------------------------------------------------------------------
+
+#[test]
+fn flex_wrap_breaks_lines_and_counts_the_gap_once() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let items: Vec<NodeId> = (0..3)
+        .map(|_| element(&mut document, container, "div"))
+        .collect();
+    let mut styles = MockStyles::new();
+    styles.set(container, NodeStyle::flex_row().with_wrap().with_gap(10.0));
+    for item in &items {
+        styles.set(*item, NodeStyle::BLOCK.with_width(40.0).with_height(10.0));
+    }
+    // 100px container: two 40px items plus a 10px gap fit (90), the third wraps.
+    let tree = layout_with(&document, &styles, 100.0, 600.0);
+
+    assert_positions(xs(&tree, &items), &[0.0, 50.0, 0.0]);
+    assert_positions(ys(&tree, &items), &[0.0, 0.0, 20.0]);
+    // The gap separates the items on the first line...
+    assert_close(
+        box_of(&tree, items[1]).rect.origin.x - box_of(&tree, items[0]).rect.max_x(),
+        10.0,
+    );
+    // ...and the two lines: 10 + 10 + 10.
+    assert_close(box_of(&tree, container).content.height(), 30.0);
+}
+
+#[test]
+fn grow_splits_free_space_equally() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let first = element(&mut document, container, "div");
+    let second = element(&mut document, container, "div");
+    let mut styles = MockStyles::new();
+    styles.set(container, NodeStyle::flex_row());
+    for item in [first, second] {
+        styles.set(
+            item,
+            NodeStyle::BLOCK
+                .with_width(20.0)
+                .with_height(10.0)
+                .with_grow(1.0),
+        );
+    }
+    let tree = layout_with(&document, &styles, 100.0, 600.0);
+
+    // 2 * 20px base leaves 60px, split 30/30.
+    assert_close(box_of(&tree, first).rect.width(), 50.0);
+    assert_close(box_of(&tree, second).rect.width(), 50.0);
+    assert_positions(xs(&tree, &[first, second]), &[0.0, 50.0]);
+    assert_close(box_of(&tree, container).content.height(), 10.0);
+}
+
+#[test]
+fn grow_zero_gives_everything_to_the_second_item() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let fixed = element(&mut document, container, "div");
+    let growing = element(&mut document, container, "div");
+    let mut styles = MockStyles::new();
+    styles.set(container, NodeStyle::flex_row());
+    styles.set(fixed, NodeStyle::BLOCK.with_width(20.0).with_height(10.0));
+    styles.set(
+        growing,
+        NodeStyle::BLOCK
+            .with_width(20.0)
+            .with_height(10.0)
+            .with_grow(1.0),
+    );
+    let tree = layout_with(&document, &styles, 100.0, 600.0);
+
+    assert_close(box_of(&tree, fixed).rect.width(), 20.0);
+    assert_close(box_of(&tree, growing).rect.width(), 80.0);
+    assert_positions(xs(&tree, &[fixed, growing]), &[0.0, 20.0]);
+}
+
+#[test]
+fn shrink_halves_an_overflowing_pair() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let first = element(&mut document, container, "div");
+    let second = element(&mut document, container, "div");
+    let mut styles = MockStyles::new();
+    styles.set(container, NodeStyle::flex_row());
+    for item in [first, second] {
+        // `flex-shrink` defaults to 1.
+        styles.set(item, NodeStyle::BLOCK.with_width(80.0).with_height(10.0));
+    }
+    let tree = layout_with(&document, &styles, 100.0, 600.0);
+
+    // 160px of base size shrinks by 60px, 30px from each equal-weight item.
+    assert_close(box_of(&tree, first).rect.width(), 50.0);
+    assert_close(box_of(&tree, second).rect.width(), 50.0);
+    assert_positions(xs(&tree, &[first, second]), &[0.0, 50.0]);
+}
+
+#[test]
+fn shrink_zero_keeps_the_overflow() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let first = element(&mut document, container, "div");
+    let second = element(&mut document, container, "div");
+    let mut styles = MockStyles::new();
+    styles.set(container, NodeStyle::flex_row());
+    for item in [first, second] {
+        styles.set(
+            item,
+            NodeStyle::BLOCK
+                .with_width(80.0)
+                .with_height(10.0)
+                .with_shrink(0.0),
+        );
+    }
+    let tree = layout_with(&document, &styles, 100.0, 600.0);
+
+    assert_close(box_of(&tree, first).rect.width(), 80.0);
+    assert_close(box_of(&tree, second).rect.width(), 80.0);
+    assert_positions(xs(&tree, &[first, second]), &[0.0, 80.0]);
+    assert_close(box_of(&tree, container).content.height(), 10.0);
+}
+
+#[test]
+fn zero_basis_with_grow_shares_the_line_equally() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let long = element(&mut document, container, "div");
+    text(&mut document, long, "Hello");
+    let short = element(&mut document, container, "div");
+    text(&mut document, short, "Hi");
+    let mut styles = MockStyles::new();
+    styles.set(container, NodeStyle::flex_row());
+    // The different max-content widths must not matter: the basis is zero.
+    styles.set(
+        long,
+        NodeStyle::BLOCK.with_basis(Length::px(0.0)).with_grow(1.0),
+    );
+    styles.set(
+        short,
+        NodeStyle::BLOCK.with_basis(Length::px(0.0)).with_grow(1.0),
+    );
+    let tree = layout_with(&document, &styles, 100.0, 600.0);
+
+    assert_close(box_of(&tree, long).rect.width(), 50.0);
+    assert_close(box_of(&tree, short).rect.width(), 50.0);
+    assert_positions(xs(&tree, &[long, short]), &[0.0, 50.0]);
+}
+
+#[test]
+fn flex_basis_beats_the_declared_width() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let item = element(&mut document, container, "div");
+    let mut styles = MockStyles::new();
+    styles.set(container, NodeStyle::flex_row());
+    styles.set(
+        item,
+        NodeStyle::BLOCK
+            .with_width(80.0)
+            .with_height(10.0)
+            .with_basis(Length::px(30.0)),
+    );
+    let tree = layout_with(&document, &styles, 100.0, 600.0);
+
+    assert_close(box_of(&tree, item).rect.width(), 30.0);
+}
+
+#[test]
+fn percent_basis_resolves_against_the_container_width() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let first = element(&mut document, container, "div");
+    let second = element(&mut document, container, "div");
+    let mut styles = MockStyles::new();
+    styles.set(container, NodeStyle::flex_row());
+    for item in [first, second] {
+        styles.set(
+            item,
+            NodeStyle::BLOCK
+                .with_height(10.0)
+                .with_basis(Length::percent(50.0)),
+        );
+    }
+    let tree = layout_with(&document, &styles, 100.0, 600.0);
+
+    assert_close(box_of(&tree, first).rect.width(), 50.0);
+    assert_close(box_of(&tree, second).rect.width(), 50.0);
+}
+
+#[test]
+fn each_line_gets_its_own_justify_content_and_align_items() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let short = element(&mut document, container, "div");
+    let tall = element(&mut document, container, "div");
+    let alone = element(&mut document, container, "div");
+    let mut styles = MockStyles::new();
+    styles.set(
+        container,
+        NodeStyle::flex_row()
+            .with_wrap()
+            .with_align(AlignItems::Center)
+            .with_justify(JustifyContent::FlexEnd),
+    );
+    styles.set(short, NodeStyle::BLOCK.with_width(40.0).with_height(10.0));
+    styles.set(tall, NodeStyle::BLOCK.with_width(40.0).with_height(30.0));
+    styles.set(alone, NodeStyle::BLOCK.with_width(30.0).with_height(10.0));
+    let tree = layout_with(&document, &styles, 100.0, 600.0);
+
+    // Line one is 80px wide and 30px tall; line two holds the third item.
+    assert_positions(xs(&tree, &[short, tall, alone]), &[20.0, 60.0, 70.0]);
+    assert_positions(ys(&tree, &[short, tall, alone]), &[10.0, 0.0, 30.0]);
+    assert_close(box_of(&tree, container).content.height(), 40.0);
+}
+
+#[test]
+fn grow_applies_per_line() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let items: Vec<NodeId> = (0..3)
+        .map(|_| element(&mut document, container, "div"))
+        .collect();
+    let mut styles = MockStyles::new();
+    styles.set(container, NodeStyle::flex_row().with_wrap());
+    for item in &items {
+        styles.set(
+            *item,
+            NodeStyle::BLOCK
+                .with_width(40.0)
+                .with_height(10.0)
+                .with_grow(1.0),
+        );
+    }
+    let tree = layout_with(&document, &styles, 100.0, 600.0);
+
+    // Line one has two items and 20px of free space, line two one item and 60px.
+    assert_positions(xs(&tree, &items), &[0.0, 50.0, 0.0]);
+    assert_positions(ys(&tree, &items), &[0.0, 0.0, 10.0]);
+    assert_close(box_of(&tree, items[0]).rect.width(), 50.0);
+    assert_close(box_of(&tree, items[1]).rect.width(), 50.0);
+    assert_close(box_of(&tree, items[2]).rect.width(), 100.0);
+    assert_close(box_of(&tree, container).content.height(), 20.0);
+}
+
+#[test]
+fn shrink_never_goes_below_a_zero_content_width() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let first = element(&mut document, container, "div");
+    let second = element(&mut document, container, "div");
+    let mut styles = MockStyles::new();
+    styles.set(container, NodeStyle::flex_row());
+    for item in [first, second] {
+        // 10px of flex base plus 120px of horizontal padding: the line must shrink the
+        // content below zero, which is clamped.
+        styles.set(
+            item,
+            NodeStyle::BLOCK
+                .with_basis(Length::px(10.0))
+                .with_padding(Edges::new(0.0, 60.0, 0.0, 60.0)),
+        );
+    }
+    let tree = layout_with(&document, &styles, 100.0, 600.0);
+
+    assert_close(box_of(&tree, first).content.width(), 0.0);
+    assert_close(box_of(&tree, second).content.width(), 0.0);
+    // The padding still occupies the border box.
+    assert_close(box_of(&tree, first).rect.width(), 120.0);
+    assert_positions(xs(&tree, &[first, second]), &[0.0, 120.0]);
+}
+
+#[test]
+fn column_wrap_is_unsupported_and_keeps_a_single_line() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let items: Vec<NodeId> = (0..3)
+        .map(|_| element(&mut document, container, "div"))
+        .collect();
+    let mut styles = MockStyles::new();
+    styles.set(container, NodeStyle::flex_column().with_wrap());
+    for item in &items {
+        styles.set(*item, NodeStyle::BLOCK.with_height(30.0));
+    }
+    // `flex-wrap` is documented as row-only: the column keeps one line.
+    let tree = layout_with(&document, &styles, 100.0, 600.0);
+
+    assert_positions(ys(&tree, &items), &[0.0, 30.0, 60.0]);
+    assert_positions(xs(&tree, &items), &[0.0, 0.0, 0.0]);
+    assert_close(box_of(&tree, container).content.height(), 90.0);
 }

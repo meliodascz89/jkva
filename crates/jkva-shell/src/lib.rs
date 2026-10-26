@@ -28,8 +28,8 @@ use jkva_dom::{Document, NodeId, NodeKind};
 use jkva_engine::parse_page;
 use jkva_gfx::{Image, Scene, SceneItem, TextureData, render_scene};
 use jkva_layout::{
-    AlignItems, Display, Edges, FlexDirection, JustifyContent, LayoutTree, Length, LengthEdges,
-    StyleSource, TextMeasure, Viewport as LayoutViewport, layout,
+    AlignItems, Display, Edges, FlexDirection, FlexWrap, JustifyContent, LayoutTree, Length,
+    LengthEdges, StyleSource, TextMeasure, Viewport as LayoutViewport, layout,
 };
 use jkva_paint::{DamageRegion, Rect as PaintRect};
 use jkva_style::{ComputedStyle, ComputedStyleMap, StyleEngine, Stylesheet};
@@ -302,6 +302,11 @@ impl<'a> Styles<'a> {
         }
     }
 
+    fn number(&self, node: NodeId, pick: impl Fn(&ComputedStyle) -> &str) -> Option<f32> {
+        let style = self.map.get(node)?;
+        pick(style).trim().parse().ok()
+    }
+
     fn family_of(&self, node: NodeId) -> String {
         let family = self
             .inherited_style(node)
@@ -420,6 +425,28 @@ impl StyleSource for Styles<'_> {
             Some("column") => FlexDirection::Column,
             _ => FlexDirection::Row,
         }
+    }
+
+    fn flex_wrap(&self, node: NodeId) -> FlexWrap {
+        match self.map.get(node).map(|s| s.flex_wrap.as_str()) {
+            Some("wrap") => FlexWrap::Wrap,
+            _ => FlexWrap::NoWrap,
+        }
+    }
+
+    fn flex_grow(&self, node: NodeId) -> f32 {
+        self.number(node, |s| &s.flex_grow).unwrap_or(0.0)
+    }
+
+    fn flex_shrink(&self, node: NodeId) -> f32 {
+        self.number(node, |s| &s.flex_shrink).unwrap_or(1.0)
+    }
+
+    fn flex_basis(&self, node: NodeId) -> Length {
+        let Some(style) = self.map.get(node) else {
+            return Length::Auto;
+        };
+        parse_length_value(&style.flex_basis, self.font_px(node))
     }
 
     fn justify_content(&self, node: NodeId) -> JustifyContent {

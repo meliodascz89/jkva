@@ -261,6 +261,19 @@ pub enum AlignItems {
     FlexEnd,
 }
 
+/// Whether a flex container puts its items on more than one line.
+///
+/// Wrapping is implemented for [`FlexDirection::Row`]; a column container ignores it and
+/// stays single-line (see the crate-level simplifications).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FlexWrap {
+    /// Keep every item on one line and let the line overflow (the initial value).
+    #[default]
+    NoWrap,
+    /// Move items that do not fit onto a new line.
+    Wrap,
+}
+
 /// Replaces negative and non-finite values with `0.0`.
 ///
 /// `f32::max` returns the non-NaN operand, so `NaN.max(0.0)` is `0.0`; the explicit
@@ -358,7 +371,43 @@ pub trait StyleSource {
         None
     }
 
+    /// Returns whether a flex container wraps its items onto more than one line.
+    ///
+    /// Defaults to [`FlexWrap::NoWrap`]. Only row containers honour it; a column
+    /// container ignores wrapping.
+    fn flex_wrap(&self, _node: NodeId) -> FlexWrap {
+        FlexWrap::NoWrap
+    }
+
+    /// Returns the `flex-grow` factor of a flex item.
+    ///
+    /// Defaults to `0.0` (an item does not grow). Negative and non-finite values are
+    /// clamped to `0.0` by layout, so an implementation cannot corrupt the line.
+    /// Only a row container's main axis grows.
+    fn flex_grow(&self, _node: NodeId) -> f32 {
+        0.0
+    }
+
+    /// Returns the `flex-shrink` factor of a flex item.
+    ///
+    /// Defaults to `1.0` (CSS's initial value: an item shrinks when its line
+    /// overflows). Negative and non-finite values are clamped to `0.0` by layout.
+    fn flex_shrink(&self, _node: NodeId) -> f32 {
+        1.0
+    }
+
+    /// Returns the declared `flex-basis` of a flex item.
+    ///
+    /// [`Length::Auto`] means "no basis": layout falls back to the declared width and
+    /// then to the max-content approximation. A percentage resolves against the flex
+    /// container's content width. Only a row container reads it.
+    fn flex_basis(&self, _node: NodeId) -> Length {
+        Length::Auto
+    }
+
     /// Returns the flex gap in CSS pixels, applied to both axes.
+    ///
+    /// The same value separates items on a line and lines from each other.
     fn gap(&self, _node: NodeId) -> f32 {
         0.0
     }
@@ -428,6 +477,51 @@ mod tests {
         assert_eq!(clamp(-0.001), 0.0);
         assert_eq!(clamp(f32::NEG_INFINITY), 0.0);
         assert_eq!(clamp(f32::NAN), 0.0);
+    }
+
+    #[test]
+    fn flex_property_defaults_match_the_css_initial_values() {
+        assert_eq!(FlexWrap::default(), FlexWrap::NoWrap);
+        assert_ne!(FlexWrap::Wrap, FlexWrap::NoWrap);
+        // The trait defaults are the initial values; an adapter that does not override
+        // them must behave like an unstyled item.
+        struct Unstyled;
+        impl StyleSource for Unstyled {
+            fn display(&self, _node: NodeId) -> Display {
+                Display::Block
+            }
+            fn width(&self, _node: NodeId) -> Length {
+                Length::Auto
+            }
+            fn height(&self, _node: NodeId) -> Length {
+                Length::Auto
+            }
+            fn margin(&self, _node: NodeId) -> LengthEdges {
+                LengthEdges::ZERO
+            }
+            fn padding(&self, _node: NodeId) -> LengthEdges {
+                LengthEdges::ZERO
+            }
+            fn border(&self, _node: NodeId) -> Edges {
+                Edges::ZERO
+            }
+            fn font_size(&self, _node: NodeId) -> f32 {
+                16.0
+            }
+            fn color(&self, _node: NodeId) -> [u8; 4] {
+                [0, 0, 0, 255]
+            }
+            fn background_color(&self, _node: NodeId) -> Option<[u8; 4]> {
+                None
+            }
+        }
+        // A style source is a pure lookup, so one probe call per getter is enough.
+        let source = Unstyled;
+        let node = jkva_dom::Document::new().root();
+        assert_eq!(source.flex_wrap(node), FlexWrap::NoWrap);
+        assert_eq!(source.flex_grow(node), 0.0);
+        assert_eq!(source.flex_shrink(node), 1.0);
+        assert_eq!(source.flex_basis(node), Length::Auto);
     }
 
     #[test]

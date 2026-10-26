@@ -242,6 +242,14 @@ pub struct ComputedStyle {
     pub gap: String,
     /// The `align-self` property; `auto` follows the container. Not inherited.
     pub align_self: String,
+    /// The `flex-wrap` property. Not inherited.
+    pub flex_wrap: String,
+    /// The `flex-grow` property. Not inherited.
+    pub flex_grow: String,
+    /// The `flex-shrink` property. Not inherited.
+    pub flex_shrink: String,
+    /// The `flex-basis` property. Not inherited.
+    pub flex_basis: String,
     /// The `font-size` property. Inherited.
     pub font_size: String,
     /// The `font-weight` property. Inherited.
@@ -304,6 +312,10 @@ impl ComputedStyle {
             align_items: String::new(),
             gap: String::new(),
             align_self: String::new(),
+            flex_wrap: String::new(),
+            flex_grow: String::new(),
+            flex_shrink: String::new(),
+            flex_basis: String::new(),
             font_size: String::new(),
             font_weight: String::new(),
             font_family: String::new(),
@@ -355,6 +367,10 @@ impl ComputedStyle {
             align_items: "stretch".to_owned(),
             gap: "0".to_owned(),
             align_self: "auto".to_owned(),
+            flex_wrap: "nowrap".to_owned(),
+            flex_grow: "0".to_owned(),
+            flex_shrink: "1".to_owned(),
+            flex_basis: "auto".to_owned(),
             font_size: "16px".to_owned(),
             font_weight: "normal".to_owned(),
             font_family: String::new(),
