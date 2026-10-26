@@ -22,6 +22,9 @@ use objc2::runtime::ProtocolObject;
 use objc2_foundation::NSString;
 
 pub use jkva_paint::Rect;
+
+mod executor;
+pub use executor::GpuExecutor;
 use jkva_paint::{DisplayItem, DisplayList};
 use objc2_metal::{
     MTLBlendFactor, MTLClearColor, MTLCommandBuffer, MTLCommandEncoder, MTLCommandQueue,

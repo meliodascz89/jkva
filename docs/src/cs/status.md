@@ -59,6 +59,7 @@ Co je hotové, co je ověřené a co se záměrně ještě nedělá. Každý ř�
 | Permission gate | hotovo | `jkva-api::permissions`: grant once/session, per origin+aplikace, deny přebije, insecure originy odmítnuty |
 | Gamepad vstup přes IPC v2 | hotovo | `InputEvent::Gamepad` s tlačítky a osami |
 | GPU command ABI | hotovo | `jkva-gpu`: typované příkazy, limity zařízení, vyvážené passy, verzované rámce, 7 testů |
+| Metal executor pro GPU ABI | hotovo | `GpuExecutor` vykreslí trojúhelník z command listu a přečte ho zpět |
 | Frame pacing s pevným krokem | hotovo | `jkva-core::frame::FrameClock`: cap kroků, interpolační alpha, změna rate |
 | GPU capability probe | hotovo | `jkva-gfx::capabilities()`: Apple M4, 13,6 GiB max buffer, 18,2 GiB working set, timestamp counters |
 | Frame-time benchmark | hotovo | `tools/gfx-bench`: 4096 quadů, 1080p, CPU submit p95 0,153 ms, GPU execution p95 1,221 ms |

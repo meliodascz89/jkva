@@ -98,6 +98,19 @@ Pipelines, bind groups, samplers and compute come next. The crate is
 
 The gate stores decisions only. It never opens a socket: `jkva-net` still refuses to bind without its own grant, so a bug in the prompt cannot silently enable networking.
 
+## Metal execution
+
+The ABI is not only a paper contract any more: `jkva-gfx::GpuExecutor` executes a
+validated `CommandList` on Metal — buffer creation and upload, render-target
+textures, one pass at a time, vertex-buffer binding and draws. A test builds a
+triangle entirely through the ABI, executes it, reads the target back and checks
+the red centre pixel.
+
+Pipeline `0` is the scene pipeline (position/uv/rgba vertices sampled against a
+1×1 white texture). Texture binding, extra pipelines, instancing and compute are
+the next increments; the executor refuses what it does not implement instead of
+silently drawing nothing.
+
 ## Status
 
 The design is in ADR-026. Done: the permission-gated UDP transport in `jkva-net` (Tokio, default deny, grant/revoke, quotas) and the fixed-timestep `FrameClock` in `jkva-core` (capped simulation steps, interpolation alpha, rate changes). In progress: the GPU capability probe and frame-time harness in `jkva-gfx`. Gamepad input is a typed message in `jkva-ipc` protocol v2.

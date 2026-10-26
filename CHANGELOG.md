@@ -33,7 +33,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - `jkva-style`: CSS parser, structural selector model, L4 specificity, selector matching and the cascade into `ComputedStyle` (at-rule contents, `var()` and a UA stylesheet are not implemented yet).
 - `jkva-text`: font discovery (fontdb), HarfBuzz shaping (harfrust) and glyph rasterization to alpha coverage (swash), with a documented fallback chain.
 - `jkva-api`: permission gate — normalised origins, per-origin and per-application once/session grants, denial override, session cleanup (7 tests).
-- `jkva-gpu`: backend-neutral GPU command ABI — typed commands, device limits, balanced-pass validation, versioned framing (7 tests).
+- `jkva-gfx`: `GpuExecutor` executes a `jkva-gpu` command list on Metal (buffers, uploads, targets, pass, bind, draw) and reads targets back.
+- `jkva-gpu`: protocol v2 adds `BindVertexBuffer`; backend-neutral GPU command ABI — typed commands, device limits, balanced-pass validation, versioned framing (7 tests).
 - `jkva-gfx`: persistent `SceneRenderer` reuses device, queue, pipeline, sampler and white texture; `submit` skips CPU readback and `render_scene` delegates to it.
 - `jkva-shell`: `Frame::render_with` / `submit_with` accept a caller-owned renderer for frame loops.
 - `jkva-text`: shaped-run cache keyed by text and style, capped at 4096 entries with a wholesale clear.

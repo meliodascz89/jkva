@@ -272,6 +272,7 @@ dependencies = [
 name = "jkva-gfx"
 version = "0.0.0"
 dependencies = [
+ "jkva-gpu",
  "jkva-paint",
  "objc2",
  "objc2-foundation",

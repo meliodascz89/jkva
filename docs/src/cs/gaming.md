@@ -90,6 +90,12 @@ To je šev, který sdílí Metal backend a budoucí WebGPU-style API. Aktuální
 
 Gate ukládá jen rozhodnutí. Nikdy neotevírá socket: `jkva-net` pořád odmítne bind bez svého grantu, takže chyba v promptu nemůže tiše zapnout síť.
 
+## Metal execution
+
+ABI už není jen papírový kontrakt: `jkva-gfx::GpuExecutor` vykonává validovaný `CommandList` na Metal — vytvoření a upload bufferu, render-target textury, jeden pass, bind vertex bufferu a draw. Test postaví trojúhelník celý přes ABI, vykoná ho, přečte target a zkontroluje červený pixel ve středu.
+
+Pipeline `0` je scénová pipeline (position/uv/rgba vrcholy vzorkované z 1×1 bílé textury). Bind textur, další pipelines, instancing a compute jsou další kroky; executor odmítne, co neumí, místo aby tiše nic nenakreslil.
+
 ## Stav
 
 Design je v ADR-026. Hotové: permission-gated UDP transport v `jkva-net` (Tokio, default deny, grant/revoke, kvóty) a fixed-timestep `FrameClock` v `jkva-core` (cap na kroky, interpolační alpha, změna rate). Rozpracované: GPU capability probe a frame-time harness v `jkva-gfx`. Gamepad vstup je typovaná zpráva v `jkva-ipc` protokolu v2.

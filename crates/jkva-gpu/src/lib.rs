@@ -26,7 +26,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Version of the GPU command protocol.
-pub const PROTOCOL_VERSION: u16 = 1;
+pub const PROTOCOL_VERSION: u16 = 2;
 
 /// Largest encoded command list accepted by [`CommandList::decode`].
 pub const MAX_COMMAND_BYTES: u32 = 32 * 1024 * 1024;
@@ -157,6 +157,13 @@ pub enum Command {
         target: ResourceId,
         /// Clear colour in linear RGBA.
         clear: [f64; 4],
+    },
+    /// Binds a vertex buffer for the following draws.
+    BindVertexBuffer {
+        /// Binding slot; the scene pipeline reads slot 0.
+        slot: u32,
+        /// Buffer to bind; it must have been created in this list.
+        id: ResourceId,
     },
     /// Draws `vertices` vertices from the bound vertex buffer.
     Draw {
@@ -352,6 +359,14 @@ impl CommandList {
                     }
                     pass_open = true;
                 }
+                Command::BindVertexBuffer { id, .. } => {
+                    if !pass_open {
+                        return Err(GpuError::NoPass);
+                    }
+                    if !buffers.iter().any(|(existing, _)| existing == id) {
+                        return Err(GpuError::UnknownResource(*id));
+                    }
+                }
                 Command::Draw { instances, .. } => {
                     if !pass_open {
                         return Err(GpuError::NoPass);
@@ -469,6 +484,10 @@ mod tests {
         list.push(Command::BeginPass {
             target: ResourceId(2),
             clear: [0.0, 0.0, 0.0, 1.0],
+        });
+        list.push(Command::BindVertexBuffer {
+            slot: 0,
+            id: ResourceId(1),
         });
         list.push(Command::Draw {
             pipeline: 0,

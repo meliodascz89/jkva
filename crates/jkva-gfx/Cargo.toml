@@ -13,6 +13,7 @@ workspace = true
 
 [dependencies]
 jkva-paint = { path = "../jkva-paint" }
+jkva-gpu = { path = "../jkva-gpu" }
 objc2.workspace = true
 objc2-foundation.workspace = true
 objc2-metal.workspace = true
