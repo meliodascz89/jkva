@@ -131,6 +131,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "engine-bench"
+version = "0.0.0"
+dependencies = [
+ "jkva-gfx",
+ "jkva-shell",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

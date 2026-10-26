@@ -1,0 +1,17 @@
+[package]
+name = "engine-bench"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+description = "End-to-end engine frame benchmark: paint, text and Metal submit (gaming performance)"
+
+[lints]
+workspace = true
+
+[dependencies]
+jkva-shell = { path = "../../crates/jkva-shell" }
+jkva-gfx = { path = "../../crates/jkva-gfx" }

@@ -28,7 +28,7 @@ use objc2_metal::{
     MTLLibrary, MTLLoadAction, MTLOrigin, MTLPixelFormat, MTLPrimitiveType, MTLRegion,
     MTLRenderCommandEncoder, MTLRenderPassDescriptor, MTLRenderPipelineDescriptor,
     MTLRenderPipelineState, MTLResourceOptions, MTLSamplerAddressMode, MTLSamplerDescriptor,
-    MTLSamplerMinMagFilter, MTLSize, MTLStorageMode, MTLStoreAction, MTLTexture,
+    MTLSamplerMinMagFilter, MTLSamplerState, MTLSize, MTLStorageMode, MTLStoreAction, MTLTexture,
     MTLTextureDescriptor, MTLTextureUsage,
 };
 
@@ -252,17 +252,7 @@ fn finish(
     let queue = device
         .newCommandQueue()
         .ok_or("could not create a command queue")?;
-    let command_buffer = queue
-        .commandBuffer()
-        .ok_or("could not create a command buffer")?;
-    let encoder = command_buffer
-        .renderCommandEncoderWithDescriptor(&target.pass)
-        .ok_or("could not create a render encoder")?;
-    draw(&encoder)?;
-    encoder.endEncoding();
-    command_buffer.commit();
-    command_buffer.waitUntilCompleted();
-    Ok(())
+    encode_and_wait(&queue, target, draw)
 }
 
 /// Renders a solid clear colour into an offscreen RGBA8 texture and reads it back.
@@ -667,121 +657,205 @@ fn make_texture(
 ///
 /// Returns an error when Metal is unavailable, a texture is malformed, or a
 /// pipeline object cannot be created.
-pub fn render_scene(width: u32, height: u32, scene: &Scene) -> Result<Image, String> {
-    if width == 0 || height == 0 {
-        return Err("image dimensions must be non-zero".into());
-    }
-    let device = MTLCreateSystemDefaultDevice().ok_or("no Metal device")?;
-    let target = new_target(&device, width, height, [1.0, 1.0, 1.0, 1.0])?;
+/// Offscreen renderer with a persistent Metal device, queue, pipeline, sampler and
+/// white texture.
+///
+/// [`render_scene`] creates all of that per call, which is fine for a screenshot but
+/// useless for a game frame. A renderer keeps the objects alive, so a caller can
+/// submit frames back to back; [`SceneRenderer::submit`] deliberately skips the CPU
+/// readback, which a presented frame does not need.
+pub struct SceneRenderer {
+    device: Retained<ProtocolObject<dyn MTLDevice>>,
+    queue: Retained<ProtocolObject<dyn MTLCommandQueue>>,
+    state: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
+    sampler: Retained<ProtocolObject<dyn MTLSamplerState>>,
+    white: Retained<ProtocolObject<dyn MTLTexture>>,
+}
 
-    let state = build_scene_pipeline(&device)?;
-    let sampler = {
-        let descriptor = MTLSamplerDescriptor::new();
-        descriptor.setMinFilter(MTLSamplerMinMagFilter::Linear);
-        descriptor.setMagFilter(MTLSamplerMinMagFilter::Linear);
-        descriptor.setSAddressMode(MTLSamplerAddressMode::ClampToEdge);
-        descriptor.setTAddressMode(MTLSamplerAddressMode::ClampToEdge);
-        device
-            .newSamplerStateWithDescriptor(&descriptor)
-            .ok_or("could not create a sampler")?
-    };
-
-    let white = make_texture(
-        &device,
-        &TextureData {
-            width: 1,
-            height: 1,
-            rgba: vec![255, 255, 255, 255],
-        },
-    )?;
-
-    let mut vertices: Vec<SceneVertex> = Vec::new();
-    let mut draws: Vec<SceneDraw> = Vec::new();
-    for item in &scene.items {
-        let start = vertices.len();
-        let (rect, texture, tint) = match item {
-            SceneItem::Rect { rect, color } => (*rect, None, *color),
-            SceneItem::Image {
-                rect,
-                texture,
-                tint,
-            } => (*rect, Some(texture), *tint),
+impl SceneRenderer {
+    /// Creates the renderer, or returns why Metal is unavailable.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the device, queue, pipeline, sampler or the 1×1 white
+    /// texture cannot be created.
+    pub fn new() -> Result<Self, String> {
+        let device = MTLCreateSystemDefaultDevice().ok_or("no Metal device")?;
+        let queue = device
+            .newCommandQueue()
+            .ok_or("could not create a command queue")?;
+        let state = build_scene_pipeline(&device)?;
+        let sampler = {
+            let descriptor = MTLSamplerDescriptor::new();
+            descriptor.setMinFilter(MTLSamplerMinMagFilter::Linear);
+            descriptor.setMagFilter(MTLSamplerMinMagFilter::Linear);
+            descriptor.setSAddressMode(MTLSamplerAddressMode::ClampToEdge);
+            descriptor.setTAddressMode(MTLSamplerAddressMode::ClampToEdge);
+            device
+                .newSamplerStateWithDescriptor(&descriptor)
+                .ok_or("could not create a sampler")?
         };
-        let to_ndc = |x: f32, y: f32| -> [f32; 2] {
-            [x / width as f32 * 2.0 - 1.0, 1.0 - y / height as f32 * 2.0]
-        };
-        let (x0, y0, x1, y1) = (rect.min_x(), rect.min_y(), rect.max_x(), rect.max_y());
-        let c = [
-            f32::from(tint[0]) / 255.0,
-            f32::from(tint[1]) / 255.0,
-            f32::from(tint[2]) / 255.0,
-            f32::from(tint[3]) / 255.0,
-        ];
-        let p0 = SceneVertex {
-            position: to_ndc(x0, y0),
-            uv: [0.0, 0.0],
-            color: c,
-        };
-        let p1 = SceneVertex {
-            position: to_ndc(x1, y0),
-            uv: [1.0, 0.0],
-            color: c,
-        };
-        let p2 = SceneVertex {
-            position: to_ndc(x1, y1),
-            uv: [1.0, 1.0],
-            color: c,
-        };
-        let p3 = SceneVertex {
-            position: to_ndc(x0, y1),
-            uv: [0.0, 1.0],
-            color: c,
-        };
-        vertices.extend_from_slice(&[p0, p1, p2, p0, p2, p3]);
-        let texture = match texture {
-            Some(data) => make_texture(&device, data)?,
-            None => white.clone(),
-        };
-        draws.push((texture, start, 6));
+        let white = make_texture(
+            &device,
+            &TextureData {
+                width: 1,
+                height: 1,
+                rgba: vec![255, 255, 255, 255],
+            },
+        )?;
+        Ok(Self {
+            device,
+            queue,
+            state,
+            sampler,
+            white,
+        })
     }
 
-    if vertices.is_empty() {
-        finish(&device, &target, |_encoder| Ok(()))?;
-        return readback(&target, width, height);
+    /// Renders a scene and reads the result back to the CPU.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for zero dimensions, allocation failures or a readback
+    /// failure.
+    pub fn render(&mut self, width: u32, height: u32, scene: &Scene) -> Result<Image, String> {
+        let target = self.draw(width, height, scene)?;
+        readback(&target, width, height)
     }
 
-    let bytes = std::mem::size_of_val(vertices.as_slice());
-    let pointer = std::ptr::NonNull::new(vertices.as_ptr().cast::<std::ffi::c_void>().cast_mut())
-        .ok_or("vertex buffer is empty")?;
-    // SAFETY: the pointer is valid for the duration of the call; the buffer copies.
-    let buffer = unsafe {
-        device.newBufferWithBytes_length_options(
-            pointer,
-            bytes,
-            MTLResourceOptions::StorageModeShared,
-        )
+    /// Renders a scene and waits for the GPU without reading the pixels back.
+    ///
+    /// This is the frame path: a presented frame never needs the RGBA bytes on the
+    /// CPU.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for zero dimensions or allocation failures.
+    pub fn submit(&mut self, width: u32, height: u32, scene: &Scene) -> Result<(), String> {
+        self.draw(width, height, scene).map(|_| ())
     }
-    .ok_or("could not create the vertex buffer")?;
 
-    finish(&device, &target, |encoder| {
-        encoder.setRenderPipelineState(&state);
-        // SAFETY: buffer index 0 matches the shader signature and the sampler is
-        // bound at index 0; every texture and vertex range belongs to a draw.
-        unsafe {
-            encoder.setVertexBuffer_offset_atIndex(Some(&buffer), 0, 0);
-            encoder.setFragmentSamplerState_atIndex(Some(&sampler), 0);
-            for (texture, start, count) in &draws {
-                encoder.setFragmentTexture_atIndex(Some(texture), 0);
-                encoder.drawPrimitives_vertexStart_vertexCount(
-                    MTLPrimitiveType::Triangle,
-                    *start,
-                    *count,
-                );
-            }
+    fn draw(&mut self, width: u32, height: u32, scene: &Scene) -> Result<Target, String> {
+        if width == 0 || height == 0 {
+            return Err("image dimensions must be non-zero".into());
         }
-        Ok(())
-    })?;
-    readback(&target, width, height)
+        let target = new_target(&self.device, width, height, [1.0, 1.0, 1.0, 1.0])?;
+        let mut vertices: Vec<SceneVertex> = Vec::new();
+        let mut draws: Vec<SceneDraw> = Vec::new();
+        for item in &scene.items {
+            let start = vertices.len();
+            let (rect, texture, tint) = match item {
+                SceneItem::Rect { rect, color } => (*rect, None, *color),
+                SceneItem::Image {
+                    rect,
+                    texture,
+                    tint,
+                } => (*rect, Some(texture), *tint),
+            };
+            let to_ndc = |x: f32, y: f32| -> [f32; 2] {
+                [x / width as f32 * 2.0 - 1.0, 1.0 - y / height as f32 * 2.0]
+            };
+            let (x0, y0, x1, y1) = (rect.min_x(), rect.min_y(), rect.max_x(), rect.max_y());
+            let c = [
+                f32::from(tint[0]) / 255.0,
+                f32::from(tint[1]) / 255.0,
+                f32::from(tint[2]) / 255.0,
+                f32::from(tint[3]) / 255.0,
+            ];
+            let p0 = SceneVertex {
+                position: to_ndc(x0, y0),
+                uv: [0.0, 0.0],
+                color: c,
+            };
+            let p1 = SceneVertex {
+                position: to_ndc(x1, y0),
+                uv: [1.0, 0.0],
+                color: c,
+            };
+            let p2 = SceneVertex {
+                position: to_ndc(x1, y1),
+                uv: [1.0, 1.0],
+                color: c,
+            };
+            let p3 = SceneVertex {
+                position: to_ndc(x0, y1),
+                uv: [0.0, 1.0],
+                color: c,
+            };
+            vertices.extend_from_slice(&[p0, p1, p2, p0, p2, p3]);
+            let texture = match texture {
+                Some(data) => make_texture(&self.device, data)?,
+                None => self.white.clone(),
+            };
+            draws.push((texture, start, 6));
+        }
+
+        if vertices.is_empty() {
+            encode_and_wait(&self.queue, &target, |_encoder| Ok(()))?;
+            return Ok(target);
+        }
+
+        let bytes = std::mem::size_of_val(vertices.as_slice());
+        let pointer =
+            std::ptr::NonNull::new(vertices.as_ptr().cast::<std::ffi::c_void>().cast_mut())
+                .ok_or("vertex buffer is empty")?;
+        // SAFETY: the pointer is valid for the duration of the call; the buffer copies.
+        let buffer = unsafe {
+            self.device.newBufferWithBytes_length_options(
+                pointer,
+                bytes,
+                MTLResourceOptions::StorageModeShared,
+            )
+        }
+        .ok_or("could not create the vertex buffer")?;
+
+        encode_and_wait(&self.queue, &target, |encoder| {
+            encoder.setRenderPipelineState(&self.state);
+            // SAFETY: buffer index 0 matches the shader signature and the sampler is
+            // bound at index 0; every texture and vertex range belongs to a draw.
+            unsafe {
+                encoder.setVertexBuffer_offset_atIndex(Some(&buffer), 0, 0);
+                encoder.setFragmentSamplerState_atIndex(Some(&self.sampler), 0);
+                for (texture, start, count) in &draws {
+                    encoder.setFragmentTexture_atIndex(Some(texture), 0);
+                    encoder.drawPrimitives_vertexStart_vertexCount(
+                        MTLPrimitiveType::Triangle,
+                        *start,
+                        *count,
+                    );
+                }
+            }
+            Ok(())
+        })?;
+        Ok(target)
+    }
+}
+
+/// Renders a scene once with a fresh Metal device and reads it back.
+///
+/// # Errors
+///
+/// Returns an error from [`SceneRenderer::new`] or [`SceneRenderer::render`].
+pub fn render_scene(width: u32, height: u32, scene: &Scene) -> Result<Image, String> {
+    SceneRenderer::new()?.render(width, height, scene)
+}
+
+fn encode_and_wait(
+    queue: &ProtocolObject<dyn MTLCommandQueue>,
+    target: &Target,
+    draw: impl FnOnce(&ProtocolObject<dyn MTLRenderCommandEncoder>) -> Result<(), String>,
+) -> Result<(), String> {
+    let command_buffer = queue
+        .commandBuffer()
+        .ok_or("could not create a command buffer")?;
+    let encoder = command_buffer
+        .renderCommandEncoderWithDescriptor(&target.pass)
+        .ok_or("could not create a render encoder")?;
+    draw(&encoder)?;
+    encoder.endEncoding();
+    command_buffer.commit();
+    command_buffer.waitUntilCompleted();
+    Ok(())
 }
 
 fn build_scene_pipeline(
@@ -897,6 +971,23 @@ mod tests {
         assert_eq!(image.width, 4);
         assert_eq!(image.rgba.len(), 64);
         assert_eq!(image.pixel(0, 0), Some([255, 0, 0, 255]));
+    }
+
+    #[test]
+    fn a_scene_renderer_reuses_its_device_across_frames() {
+        let Ok(mut renderer) = SceneRenderer::new() else {
+            return;
+        };
+        let mut scene = Scene::new();
+        scene.push(SceneItem::Rect {
+            rect: Rect::new(0.0, 0.0, 2.0, 2.0),
+            color: [255, 0, 0, 255],
+        });
+        let first = renderer.render(4, 4, &scene).unwrap();
+        let second = renderer.render(4, 4, &scene).unwrap();
+        assert_eq!(first, second, "the same scene must render identically");
+        assert_eq!(first.pixel(0, 0), Some([255, 0, 0, 255]));
+        renderer.submit(4, 4, &scene).unwrap();
     }
 
     #[cfg(target_os = "macos")]

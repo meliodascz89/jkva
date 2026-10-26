@@ -57,6 +57,16 @@ Capabilities: Apple M4, `maxBufferLength` 13,639.7 MiB, recommended working set 
 
 **This is not a game frame.** The scene is 4096 draw calls over 1920×1080 with no layout, style, JS, WASM, compositing, presentation or input, and frames are fully serialized. It is therefore neither evidence that the ADR-026 p95 ≤ 8 ms target is met nor comparable to Chrome/Safari until the same scene runs in all three engines.
 
+### Engine frame (paint + submit)
+
+`cargo run --release -p engine-bench -- --page examples/cards.html --frames 120 --width 800 --height 600`
+
+| Metric | p50 | p95 |
+|---|---:|---:|
+| One frame (scene build + GPU wait) | 8.05 ms | 10.81 ms |
+
+Scope: layout and style are static (built once), the measured frame rebuilds the scene — backgrounds, borders, glyph shaping and rasterization — uploads it and waits for the GPU, with no CPU readback. This is the number glyph-texture caching must improve; it is not a game scene and not yet comparable to Chrome.
+
 ## Status
 
 The design is in ADR-026. Done: the permission-gated UDP transport in `jkva-net` (Tokio, default deny, grant/revoke, quotas) and the fixed-timestep `FrameClock` in `jkva-core` (capped simulation steps, interpolation alpha, rate changes). In progress: the GPU capability probe and frame-time harness in `jkva-gfx`. Gamepad input is a typed message in `jkva-ipc` protocol v2.

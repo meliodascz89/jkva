@@ -58,6 +58,7 @@ What is done, what is verified, and what is deliberately not done yet. Every lin
 | Fixed-timestep frame pacing | done | `jkva-core::frame::FrameClock`: capped steps, interpolation alpha, rate change |
 | GPU capability probe | done | `jkva-gfx::capabilities()`: Apple M4, 13.6 GiB max buffer, 18.2 GiB working set, timestamp counters |
 | Frame-time benchmark | done | `tools/gfx-bench`: 4096 quads, 1080p, CPU submit p95 0.153 ms, GPU execution p95 1.221 ms |
+| Engine frame benchmark | done | `tools/engine-bench`: cards 800x600 paint+submit p50 8.05 / p95 10.81 ms |
 | WebGPU / WebGL, WASM, gamepad, pointer lock, audio | not yet | M4/M6 |
 | Performance targets (p95 frame time, input latency) | defined | [Gaming platform](gaming.md) |
 

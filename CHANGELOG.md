@@ -30,6 +30,9 @@ All notable changes to this project are documented here. The format follows [Kee
 - `jkva-style`: `border-*-width` and `border-*-style`, with `border-width`, `border-style` and `border` shorthand expansion (border colour is still `currentColor`).
 - `jkva-style`: CSS parser, structural selector model, L4 specificity, selector matching and the cascade into `ComputedStyle` (at-rule contents, `var()` and a UA stylesheet are not implemented yet).
 - `jkva-text`: font discovery (fontdb), HarfBuzz shaping (harfrust) and glyph rasterization to alpha coverage (swash), with a documented fallback chain.
+- `jkva-gfx`: persistent `SceneRenderer` reuses device, queue, pipeline, sampler and white texture; `submit` skips CPU readback and `render_scene` delegates to it.
+- `jkva-shell`: `Frame::render_with` / `submit_with` accept a caller-owned renderer for frame loops.
+- `engine-bench`: end-to-end paint+submit frame benchmark (cards 800x600 p50 8.05 ms, p95 10.81 ms).
 - `jkva-gfx`: `GpuCapabilities` report (device, buffer and memory budgets, Apple7/8/9 and Metal4, unified memory, timestamp counters) with a cfg-gated test that skips when Metal is unavailable.
 - `gfx-bench`: offscreen Metal frame-time benchmark (4096 quads, 1080p, CPU submit / GPU completion / GPU execution p50+p95, JSON).
 - `jkva-core`: fixed-timestep `FrameClock` with capped simulation steps, interpolation alpha, dropped-frame reporting and runtime rate changes (ADR-026).

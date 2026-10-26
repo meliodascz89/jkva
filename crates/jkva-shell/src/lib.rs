@@ -26,7 +26,7 @@ use std::cell::RefCell;
 
 use jkva_dom::{Document, NodeId, NodeKind};
 use jkva_engine::parse_page;
-use jkva_gfx::{Image, Scene, SceneItem, TextureData, render_scene};
+use jkva_gfx::{Image, Scene, SceneItem, SceneRenderer, TextureData};
 use jkva_layout::{
     AlignItems, Display, Edges, FlexDirection, FlexWrap, JustifyContent, LayoutTree, Length,
     LengthEdges, StyleSource, TextMeasure, Viewport as LayoutViewport, layout,
@@ -178,10 +178,39 @@ impl Frame {
     ///
     /// Returns an error when Metal is unavailable or the scene cannot be built.
     pub fn render(&self) -> Result<Image, String> {
+        let mut renderer = SceneRenderer::new()?;
+        self.render_with(&mut renderer)
+    }
+
+    /// Renders the frame with a caller-owned renderer.
+    ///
+    /// This is the frame path: a game or an animation loop reuses one renderer
+    /// across frames instead of creating a Metal device per screenshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the scene cannot be built or the GPU rejects the frame.
+    pub fn render_with(&self, renderer: &mut SceneRenderer) -> Result<Image, String> {
         let mut fonts = FontCache::new();
         let styles_adapter = Styles::new(&self.styles, &self.document);
         let scene = build_scene(&self.layout, &styles_adapter, &mut fonts);
-        render_scene(
+        renderer.render(
+            self.viewport.width as u32,
+            self.viewport.height as u32,
+            &scene,
+        )
+    }
+
+    /// Draws the frame without reading the pixels back.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the scene cannot be built or the GPU rejects the frame.
+    pub fn submit_with(&self, renderer: &mut SceneRenderer) -> Result<(), String> {
+        let mut fonts = FontCache::new();
+        let styles_adapter = Styles::new(&self.styles, &self.document);
+        let scene = build_scene(&self.layout, &styles_adapter, &mut fonts);
+        renderer.submit(
             self.viewport.width as u32,
             self.viewport.height as u32,
             &scene,

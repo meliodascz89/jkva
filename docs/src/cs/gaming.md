@@ -57,6 +57,16 @@ Capabilities: Apple M4, `maxBufferLength` 13 639,7 MiB, doporučený working set
 
 **Tohle není game frame.** Scéna je 4096 draw callů na 1920×1080 bez layoutu, stylů, JS, WASM, kompozice, prezentace a vstupu a framy jsou plně serializované. Není to tedy důkaz splnění cíle p95 ≤ 8 ms z ADR-026 ani srovnání s Chrome/Safari, dokud stejná scéna neběží ve všech třech enginech.
 
+### Engine frame (paint + submit)
+
+`cargo run --release -p engine-bench -- --page examples/cards.html --frames 120 --width 800 --height 600`
+
+| Metrika | p50 | p95 |
+|---|---:|---:|
+| Jeden frame (stavba scény + čekání na GPU) | 8,05 ms | 10,81 ms |
+
+Rozsah: layout a styly jsou statické (postavené jednou), měřený frame znovu staví scénu — pozadí, rámečky, shaping a rasterizaci glyfů — nahraje ji a čeká na GPU, bez readbacku na CPU. To je číslo, které musí zlepšit cache glyfových textur; není to herní scéna a zatím to není srovnatelné s Chrome.
+
 ## Stav
 
 Design je v ADR-026. Hotové: permission-gated UDP transport v `jkva-net` (Tokio, default deny, grant/revoke, kvóty) a fixed-timestep `FrameClock` v `jkva-core` (cap na kroky, interpolační alpha, změna rate). Rozpracované: GPU capability probe a frame-time harness v `jkva-gfx`. Gamepad vstup je typovaná zpráva v `jkva-ipc` protokolu v2.
