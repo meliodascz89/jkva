@@ -274,6 +274,41 @@ pub enum FlexWrap {
     Wrap,
 }
 
+/// Distribution of a multi-line flex container's lines along its cross axis.
+///
+/// Only a row container with more than one line and a definite cross size (a declared
+/// height) uses it; a single line keeps its own cross size, and a column container is
+/// single-line by definition (see the crate-level simplifications).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AlignContent {
+    /// Pack the lines at the cross-start edge.
+    FlexStart,
+    /// Pack the lines at the cross-end edge.
+    FlexEnd,
+    /// Centre the lines.
+    Center,
+    /// Equal space between lines, none at the edges.
+    SpaceBetween,
+    /// Equal space around every line.
+    SpaceAround,
+    /// Grow every line so the lines fill the container (the initial value of
+    /// `align-content` for a flex container).
+    #[default]
+    Stretch,
+}
+
+/// Parses a declared CSS `order` value.
+///
+/// The cascade keeps property values as text, so whoever implements
+/// [`StyleSource::order`] parses the integer with `i32::from_str` through this helper.
+/// Anything that is not an `i32` (`auto`, a length, an empty string) is treated as the
+/// initial value `0`, which is what a browser does with an invalid `order` after the
+/// declaration is dropped.
+#[must_use]
+pub fn parse_order(value: &str) -> i32 {
+    value.trim().parse().unwrap_or(0)
+}
+
 /// Replaces negative and non-finite values with `0.0`.
 ///
 /// `f32::max` returns the non-NaN operand, so `NaN.max(0.0)` is `0.0`; the explicit
@@ -405,6 +440,24 @@ pub trait StyleSource {
         Length::Auto
     }
 
+    /// Returns the item's `order`, defaulting to `0`.
+    ///
+    /// Flex items are stably sorted by this value before they are sized, wrapped and
+    /// painted, so equal orders keep document order. An implementation reads the
+    /// cascade's text and parses it with [`parse_order`].
+    fn order(&self, _node: NodeId) -> i32 {
+        0
+    }
+
+    /// Returns how a multi-line flex container distributes its lines.
+    ///
+    /// Defaults to [`AlignContent::Stretch`], the CSS initial value for a flex
+    /// container. Layout only reads it for a row container with more than one line and a
+    /// definite cross size; everywhere else the value is ignored.
+    fn align_content(&self, _node: NodeId) -> AlignContent {
+        AlignContent::Stretch
+    }
+
     /// Returns the flex gap in CSS pixels, applied to both axes.
     ///
     /// The same value separates items on a line and lines from each other.
@@ -522,6 +575,24 @@ mod tests {
         assert_eq!(source.flex_grow(node), 0.0);
         assert_eq!(source.flex_shrink(node), 1.0);
         assert_eq!(source.flex_basis(node), Length::Auto);
+        assert_eq!(source.order(node), 0);
+        assert_eq!(source.align_content(node), AlignContent::Stretch);
+    }
+
+    #[test]
+    fn align_content_defaults_to_stretch_and_order_parses_integers() {
+        assert_eq!(AlignContent::default(), AlignContent::Stretch);
+        assert_ne!(AlignContent::FlexStart, AlignContent::Stretch);
+        // The cascade keeps the value as text; layout parses it here.
+        assert_eq!(parse_order("0"), 0);
+        assert_eq!(parse_order("3"), 3);
+        assert_eq!(parse_order(" -2 "), -2);
+        assert_eq!(parse_order("+4"), 4);
+        // Invalid values fall back to the initial value instead of panicking.
+        assert_eq!(parse_order("auto"), 0);
+        assert_eq!(parse_order("3px"), 0);
+        assert_eq!(parse_order(""), 0);
+        assert_eq!(parse_order("99999999999999999999"), 0);
     }
 
     #[test]

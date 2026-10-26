@@ -115,6 +115,15 @@ fn flex_wrap_and_flex_factors_compute() {
 }
 
 #[test]
+fn order_and_align_content_compute() {
+    let document = parse_html(r#"<div id="box">x</div>"#);
+    let engine = engine_of("div { order: 3; align-content: space-between }");
+    let style = style_of(&document, &engine.compute_styles(&document), "box");
+    assert_eq!(style.order, "3");
+    assert_eq!(style.align_content, "space-between");
+}
+
+#[test]
 fn border_shorthand_sets_width_and_style_on_every_side() {
     let document = parse_html(r#"<div id="box">x</div>"#);
     let engine = engine_of("div { border: 3px solid #00ff00 }");

@@ -45,7 +45,8 @@ What is done, what is verified, and what is deliberately not done yet. Every lin
 | `align-self` per item | done | falls back to `align-items`; tested |
 | Corpus page with a golden | done | `examples/flex.html`, `examples/expected/flex.png` |
 | Wrap, `flex-grow`/`shrink`/`basis` | done | row wrapping, grow/shrink distribution, basis, percentage basis |
-| `order`, `align-content`, column wrap, intrinsic min/max | not yet | next M2 increment |
+| `order` and `align-content` | done | stable order sort; six align-content modes for multi-line rows |
+| Column wrap, `align-content` on columns, intrinsic min/max | not yet | next M2 increment |
 | Grid, tables, floats, images, scroll, hit testing, layers | not yet | M2 |
 
 ## Gaming platform (ADR-026)

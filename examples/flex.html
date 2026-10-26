@@ -4,19 +4,26 @@
     <meta charset="utf-8">
     <title>Flexbox</title>
     <style>
-      body { margin: 24px; font-family: "Helvetica"; color: #111827; }
-      h1 { font-size: 24px; margin: 0 0 16px 0; color: #1d4ed8; }
-      h2 { font-size: 18px; margin: 24px 0 8px 0; }
-      .row { display: flex; gap: 16px; justify-content: space-between; align-items: center; height: 80px; }
+      body { margin: 16px; font-family: "Helvetica"; color: #111827; }
+      h1 { font-size: 22px; margin: 0 0 10px 0; color: #1d4ed8; }
+      h2 { font-size: 16px; margin: 14px 0 6px 0; }
+      .row { display: flex; gap: 16px; justify-content: space-between; align-items: center; height: 60px; }
       .card { background-color: #eef2ff; padding: 8px; border: 1px solid #6366f1; }
-      .center { display: flex; gap: 8px; justify-content: center; align-items: center; height: 60px; }
+      .center { display: flex; gap: 8px; justify-content: center; align-items: center; height: 40px; }
       .pill { background-color: #fde68a; padding: 4px 8px; }
       .end { align-self: flex-end; }
       .mid { align-self: center; }
-      .column { display: flex; flex-direction: column; gap: 8px; }
+      .column { display: flex; flex-direction: column; gap: 6px; }
       .bar { background-color: #dbeafe; padding: 4px 8px; }
       .wrap { display: flex; flex-wrap: wrap; gap: 12px; }
       .tile { flex-basis: 160px; flex-grow: 1; background-color: #dcfce7; padding: 8px; }
+      .ordered { display: flex; gap: 8px; }
+      .ordered > div { background-color: #f3e8ff; padding: 4px 8px; }
+      .o2 { order: 2; }
+      .o0 { order: 0; }
+      .o1 { order: 1; }
+      .ac { display: flex; flex-wrap: wrap; align-content: space-between; height: 80px; gap: 6px; }
+      .ac > div { width: 45%; background-color: #e0f2fe; padding: 6px; }
     </style>
   </head>
   <body>
@@ -33,12 +40,6 @@
       <span class="pill">beta</span>
       <span class="pill">gamma</span>
     </div>
-    <h2>Column with gap</h2>
-    <div class="column">
-      <div class="bar">first</div>
-      <div class="bar">second</div>
-      <div class="bar">third</div>
-    </div>
     <h2>Wrap and grow</h2>
     <div class="wrap">
       <div class="tile">one</div>
@@ -46,6 +47,19 @@
       <div class="tile">three</div>
       <div class="tile">four</div>
       <div class="tile">five</div>
+    </div>
+    <h2>Order</h2>
+    <div class="ordered">
+      <div class="o2">A (order 2)</div>
+      <div class="o0">B (order 0)</div>
+      <div class="o1">C (order 1)</div>
+    </div>
+    <h2>Align-content</h2>
+    <div class="ac">
+      <div>line one A</div>
+      <div>line one B</div>
+      <div>line two A</div>
+      <div>line two B</div>
     </div>
   </body>
 </html>

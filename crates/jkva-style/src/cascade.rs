@@ -1093,6 +1093,8 @@ enum PropertyId {
     FlexGrow,
     FlexShrink,
     FlexBasis,
+    Order,
+    AlignContent,
     FontSize,
     FontWeight,
     FontFamily,
@@ -1100,7 +1102,7 @@ enum PropertyId {
 
 impl PropertyId {
     /// Number of tracked properties.
-    const COUNT: usize = 37;
+    const COUNT: usize = 39;
 
     /// Every tracked property, ordered by [`PropertyId::index`].
     const ALL: [Self; Self::COUNT] = [
@@ -1138,6 +1140,8 @@ impl PropertyId {
         Self::FlexGrow,
         Self::FlexShrink,
         Self::FlexBasis,
+        Self::Order,
+        Self::AlignContent,
         Self::FontSize,
         Self::FontWeight,
         Self::FontFamily,
@@ -1180,9 +1184,11 @@ impl PropertyId {
             Self::FlexGrow => 31,
             Self::FlexShrink => 32,
             Self::FlexBasis => 33,
-            Self::FontSize => 34,
-            Self::FontWeight => 35,
-            Self::FontFamily => 36,
+            Self::Order => 34,
+            Self::AlignContent => 35,
+            Self::FontSize => 36,
+            Self::FontWeight => 37,
+            Self::FontFamily => 38,
         }
     }
 
@@ -1225,6 +1231,8 @@ impl PropertyId {
             "flex-grow" => Self::FlexGrow,
             "flex-shrink" => Self::FlexShrink,
             "flex-basis" => Self::FlexBasis,
+            "order" => Self::Order,
+            "align-content" => Self::AlignContent,
             "font-size" => Self::FontSize,
             "font-weight" => Self::FontWeight,
             "font-family" => Self::FontFamily,
@@ -1280,6 +1288,8 @@ impl PropertyId {
             Self::FlexGrow => "0",
             Self::FlexShrink => "1",
             Self::FlexBasis => "auto",
+            Self::Order => "0",
+            Self::AlignContent => "stretch",
             // `medium` computes to 16px under default font settings; this crate
             // does not absolutise lengths, so the two spellings differ once a
             // document declares `font-size: medium` explicitly.
@@ -1340,6 +1350,8 @@ impl PropertyId {
             Self::FlexGrow => &style.flex_grow,
             Self::FlexShrink => &style.flex_shrink,
             Self::FlexBasis => &style.flex_basis,
+            Self::Order => &style.order,
+            Self::AlignContent => &style.align_content,
             Self::FontSize => &style.font_size,
             Self::FontWeight => &style.font_weight,
             Self::FontFamily => &style.font_family,
@@ -1390,6 +1402,8 @@ impl PropertyId {
             Self::FlexGrow => style.flex_grow = value.to_owned(),
             Self::FlexShrink => style.flex_shrink = value.to_owned(),
             Self::FlexBasis => style.flex_basis = value.to_owned(),
+            Self::Order => style.order = value.to_owned(),
+            Self::AlignContent => style.align_content = value.to_owned(),
             Self::FontSize => style.font_size = value.to_owned(),
             Self::FontWeight => style.font_weight = value.to_owned(),
             Self::FontFamily => style.font_family = value.to_owned(),
@@ -1464,6 +1478,8 @@ mod tests {
             PropertyId::FlexGrow => "flex-grow",
             PropertyId::FlexShrink => "flex-shrink",
             PropertyId::FlexBasis => "flex-basis",
+            PropertyId::Order => "order",
+            PropertyId::AlignContent => "align-content",
             PropertyId::FontSize => "font-size",
             PropertyId::FontWeight => "font-weight",
             PropertyId::FontFamily => "font-family",

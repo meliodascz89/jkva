@@ -39,6 +39,12 @@
 //! shrink × base size, clamped at a zero content width). Growing and shrinking never move
 //! an item to another line.
 //!
+//! `order` stably sorts the items before they are sized, wrapped and painted, so items
+//! with equal orders keep document order. `align-content` distributes the lines of a row
+//! with more than one line and a definite cross size: the five packing modes offset the
+//! lines, `stretch` grows every line so the lines fill the container, and a single line or
+//! an auto-height container ignores the property.
+//!
 //! Items are laid out once, at the container's content origin, with the final width the
 //! distribution produced; each subtree is then translated into its line. There is no
 //! second layout pass, because block content in this milestone does not depend on its box
@@ -70,7 +76,8 @@ use jkva_dom::{Document, NodeId, NodeKind};
 
 use crate::geometry::{Point, Rect};
 use crate::style::{
-    AlignItems, Display, Edges, FlexDirection, FlexWrap, JustifyContent, Length, StyleSource,
+    AlignContent, AlignItems, Display, Edges, FlexDirection, FlexWrap, JustifyContent, Length,
+    StyleSource,
 };
 use crate::text::{LINE_HEIGHT_FACTOR, TextMeasure, TextRun};
 use crate::tree::{LayoutBox, LayoutTree, Viewport};
@@ -371,6 +378,8 @@ struct FlexItem {
     forced_height: Option<f32>,
     /// Effective cross-axis alignment: `align-self` or the container's `align-items`.
     align: AlignItems,
+    /// `order`, used to stably sort the items before sizing and painting.
+    order: i32,
 }
 
 impl FlexItem {
@@ -535,6 +544,30 @@ fn size_flex_lines(
             }),
             FlexDirection::Column => container_width,
         });
+    }
+}
+
+/// Returns `(leading, between, extra_per_line)` for distributing `free` cross space
+/// over the lines of a multi-line flex container.
+///
+/// `Stretch` grows every line instead of moving them, which is why it returns the extra
+/// size rather than an offset. With no free space every mode returns zeroes, so an
+/// exactly filled container looks the same whichever mode is in effect.
+fn align_content_offsets(align: AlignContent, free: f32, lines: usize) -> (f32, f32, f32) {
+    let count = lines.max(1) as f32;
+    match align {
+        AlignContent::FlexStart => (0.0, 0.0, 0.0),
+        AlignContent::FlexEnd => (free, 0.0, 0.0),
+        AlignContent::Center => (free / 2.0, 0.0, 0.0),
+        AlignContent::SpaceBetween => {
+            if count > 1.0 {
+                (0.0, free / (count - 1.0), 0.0)
+            } else {
+                (0.0, 0.0, 0.0)
+            }
+        }
+        AlignContent::SpaceAround => (free / (count * 2.0), free / count, 0.0),
+        AlignContent::Stretch => (0.0, 0.0, free / count),
     }
 }
 
@@ -867,6 +900,7 @@ impl Layouter<'_> {
         let direction = self.styles.flex_direction(node);
         let justify = self.styles.justify_content(node);
         let align = self.styles.align_items(node);
+        let align_content = self.styles.align_content(node);
         let wrap = self.styles.flex_wrap(node);
         let gap = finite_non_negative(self.styles.gap(node));
 
@@ -876,7 +910,13 @@ impl Layouter<'_> {
             return (Vec::new(), 0.0);
         }
 
-        let mut items = self.measure_flex_items(&nodes, direction, align, containing);
+        let items = self.measure_flex_items(&nodes, direction, align, containing);
+        // `order` reorders the items before they are sized, wrapped and painted. The
+        // sort is stable, so equal orders keep document order.
+        let mut ordered: Vec<(FlexItem, FlexNode)> =
+            items.into_iter().zip(nodes.iter().copied()).collect();
+        ordered.sort_by_key(|(item, _)| item.order);
+        let (mut items, nodes): (Vec<FlexItem>, Vec<FlexNode>) = ordered.into_iter().unzip();
         let mut lines = flex_lines(&items, direction, wrap, gap, containing.width);
         if direction == FlexDirection::Row {
             resolve_flexible_main_sizes(&mut items, &lines, gap, containing.width);
@@ -890,8 +930,33 @@ impl Layouter<'_> {
             containing.width,
         );
 
+        // `align-content` only applies to a row with several lines and a definite cross
+        // size. It either offsets the lines or grows them; `stretch` is the reason the
+        // line cross sizes can change after the items were measured.
+        let (content_leading, content_between) =
+            if direction == FlexDirection::Row && lines.len() > 1 {
+                match definite_height {
+                    Some(height) => {
+                        let total: f32 = lines.iter().map(|line| line.cross_size).sum();
+                        let gaps = gap * (lines.len() - 1) as f32;
+                        let free = finite_non_negative(height - total - gaps);
+                        let (leading, between, extra) =
+                            align_content_offsets(align_content, free, lines.len());
+                        if extra > 0.0 {
+                            for line in &mut lines {
+                                line.cross_size += extra;
+                            }
+                        }
+                        (leading, between)
+                    }
+                    None => (0.0, 0.0),
+                }
+            } else {
+                (0.0, 0.0)
+            };
+
         let mut children = Vec::with_capacity(items.len());
-        let mut cross_cursor = top;
+        let mut cross_cursor = top + content_leading;
         for line in &lines {
             let count = line.items.len();
             let gaps = gap * (count.saturating_sub(1)) as f32;
@@ -971,7 +1036,7 @@ impl Layouter<'_> {
                 children.push(item.start);
                 cursor += outer_main + gap + between;
             }
-            cross_cursor += line.cross_size + gap;
+            cross_cursor += line.cross_size + gap + content_between;
         }
 
         let used_height = match direction {
@@ -1090,6 +1155,11 @@ impl Layouter<'_> {
                 height_declared: declared_height.is_some(),
                 forced_height: None,
                 align: item_align,
+                order: if anonymous {
+                    0
+                } else {
+                    self.styles.order(flex_node.node)
+                },
             });
         }
         items
@@ -1819,6 +1889,7 @@ mod tests {
             height_declared: true,
             forced_height: None,
             align: AlignItems::FlexStart,
+            order: 0,
         }
     }
 
@@ -1899,5 +1970,51 @@ mod tests {
         let mut column = flex_lines(&items, FlexDirection::Column, FlexWrap::NoWrap, 0.0, 100.0);
         size_flex_lines(&items, &mut column, FlexDirection::Column, None, 80.0);
         assert_eq!(column[0].cross_size, 80.0);
+    }
+
+    #[test]
+    fn align_content_offsets_distribute_the_extra_cross_space() {
+        // 80px of free cross space over two lines.
+        let free = 80.0;
+        assert_eq!(
+            align_content_offsets(AlignContent::FlexStart, free, 2),
+            (0.0, 0.0, 0.0)
+        );
+        assert_eq!(
+            align_content_offsets(AlignContent::FlexEnd, free, 2),
+            (80.0, 0.0, 0.0)
+        );
+        assert_eq!(
+            align_content_offsets(AlignContent::Center, free, 2),
+            (40.0, 0.0, 0.0)
+        );
+        assert_eq!(
+            align_content_offsets(AlignContent::SpaceBetween, free, 2),
+            (0.0, 80.0, 0.0)
+        );
+        assert_eq!(
+            align_content_offsets(AlignContent::SpaceAround, free, 2),
+            (20.0, 40.0, 0.0)
+        );
+        assert_eq!(
+            align_content_offsets(AlignContent::Stretch, free, 2),
+            (0.0, 0.0, 40.0)
+        );
+        // With no free space every mode is the identity.
+        for align in [
+            AlignContent::FlexStart,
+            AlignContent::FlexEnd,
+            AlignContent::Center,
+            AlignContent::SpaceBetween,
+            AlignContent::SpaceAround,
+            AlignContent::Stretch,
+        ] {
+            assert_eq!(align_content_offsets(align, 0.0, 2), (0.0, 0.0, 0.0));
+        }
+        // `space-between` with a single line packs it at the start.
+        assert_eq!(
+            align_content_offsets(AlignContent::SpaceBetween, 50.0, 1),
+            (0.0, 0.0, 0.0)
+        );
     }
 }

@@ -30,8 +30,8 @@ use jkva_dom::{Document, NodeId, NodeKind};
 use jkva_engine::parse_page;
 use jkva_gfx::{Image, Scene, SceneItem, SceneRenderer, TextureData};
 use jkva_layout::{
-    AlignItems, Display, Edges, FlexDirection, FlexWrap, JustifyContent, LayoutTree, Length,
-    LengthEdges, StyleSource, TextMeasure, Viewport as LayoutViewport, layout,
+    AlignContent, AlignItems, Display, Edges, FlexDirection, FlexWrap, JustifyContent, LayoutTree,
+    Length, LengthEdges, StyleSource, TextMeasure, Viewport as LayoutViewport, layout, parse_order,
 };
 use jkva_paint::{DamageRegion, Rect as PaintRect};
 use jkva_style::{ComputedStyle, ComputedStyleMap, StyleEngine, Stylesheet};
@@ -519,6 +519,23 @@ impl StyleSource for Styles<'_> {
             Some("center") => AlignItems::Center,
             Some("flex-end") => AlignItems::FlexEnd,
             _ => AlignItems::Stretch,
+        }
+    }
+
+    fn order(&self, node: NodeId) -> i32 {
+        self.map
+            .get(node)
+            .map_or(0, |style| parse_order(&style.order))
+    }
+
+    fn align_content(&self, node: NodeId) -> AlignContent {
+        match self.map.get(node).map(|s| s.align_content.as_str()) {
+            Some("flex-start") => AlignContent::FlexStart,
+            Some("flex-end") => AlignContent::FlexEnd,
+            Some("center") => AlignContent::Center,
+            Some("space-between") => AlignContent::SpaceBetween,
+            Some("space-around") => AlignContent::SpaceAround,
+            _ => AlignContent::Stretch,
         }
     }
 

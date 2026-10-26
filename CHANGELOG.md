@@ -19,6 +19,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - `jkva-shell`: `Frame` with the incremental seam — an attribute mutation re-styles, re-lays out and returns a `DamageRegion` covering the changed element and every box that moved or resized.
 - `jkva-shell`: paints background colours and borders (currentColor) in addition to glyphs; `examples/cards.html` covers borders, wrapping and monospace.
 - `jkva-shell`: the M1 pipeline HTML → cascade → layout → text → Metal, and `jkva-shot` for PNG screenshots; `examples/hello.html` is the first rendered page.
+- `jkva-layout`: flex `order` (stable) and `align-content` for multi-line rows (six modes, stretch included).
 - `jkva-layout`: flex wrapping and grow/shrink/basis — row line breaking, per-line justify/align, basis (including percentages), weighted shrink with a zero floor.
 - `jkva-layout`: flex formatting context — row/column, `justify-content`, `align-items`, `align-self`, `gap`, max-content approximation for auto widths and anonymous text items; exclusions documented.
 - `jkva-layout`: inline elements produce one background/border box per line, painted behind their text; padding and border still do not advance the inline flow.

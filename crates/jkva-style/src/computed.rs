@@ -250,6 +250,13 @@ pub struct ComputedStyle {
     pub flex_shrink: String,
     /// The `flex-basis` property. Not inherited.
     pub flex_basis: String,
+    /// The `order` property, as declared text. Not inherited.
+    ///
+    /// The cascade keeps the raw value like every other property; layout parses it into
+    /// an integer with `i32::from_str`.
+    pub order: String,
+    /// The `align-content` property. Not inherited.
+    pub align_content: String,
     /// The `font-size` property. Inherited.
     pub font_size: String,
     /// The `font-weight` property. Inherited.
@@ -316,6 +323,8 @@ impl ComputedStyle {
             flex_grow: String::new(),
             flex_shrink: String::new(),
             flex_basis: String::new(),
+            order: String::new(),
+            align_content: String::new(),
             font_size: String::new(),
             font_weight: String::new(),
             font_family: String::new(),
@@ -371,6 +380,8 @@ impl ComputedStyle {
             flex_grow: "0".to_owned(),
             flex_shrink: "1".to_owned(),
             flex_basis: "auto".to_owned(),
+            order: "0".to_owned(),
+            align_content: "stretch".to_owned(),
             font_size: "16px".to_owned(),
             font_weight: "normal".to_owned(),
             font_family: String::new(),

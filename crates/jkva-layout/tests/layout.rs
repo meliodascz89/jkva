@@ -11,8 +11,8 @@ use std::collections::HashMap;
 
 use jkva_dom::{Document, NodeId, parse_document};
 use jkva_layout::{
-    AlignItems, Display, Edges, FlexDirection, FlexWrap, JustifyContent, LayoutBox, LayoutTree,
-    Length, LengthEdges, Rect, StyleSource, TextMeasure, TextRun, Viewport, layout,
+    AlignContent, AlignItems, Display, Edges, FlexDirection, FlexWrap, JustifyContent, LayoutBox,
+    LayoutTree, Length, LengthEdges, Rect, StyleSource, TextMeasure, TextRun, Viewport, layout,
 };
 
 const BLACK: [u8; 4] = [0, 0, 0, 255];
@@ -38,6 +38,8 @@ struct NodeStyle {
     flex_grow: f32,
     flex_shrink: f32,
     flex_basis: Length,
+    order: i32,
+    align_content: AlignContent,
 }
 
 impl NodeStyle {
@@ -61,6 +63,8 @@ impl NodeStyle {
         flex_grow: 0.0,
         flex_shrink: 1.0,
         flex_basis: Length::Auto,
+        order: 0,
+        align_content: AlignContent::Stretch,
     };
 
     /// An inline element: flattened by layout, so only text properties matter.
@@ -170,6 +174,16 @@ impl NodeStyle {
         self.flex_basis = basis;
         self
     }
+
+    fn with_order(mut self, order: i32) -> Self {
+        self.order = order;
+        self
+    }
+
+    fn with_align_content(mut self, align_content: AlignContent) -> Self {
+        self.align_content = align_content;
+        self
+    }
 }
 
 /// A style source whose answers are a map, with a block default.
@@ -263,6 +277,14 @@ impl StyleSource for MockStyles {
 
     fn flex_basis(&self, node: NodeId) -> Length {
         self.get(node).flex_basis
+    }
+
+    fn order(&self, node: NodeId) -> i32 {
+        self.get(node).order
+    }
+
+    fn align_content(&self, node: NodeId) -> AlignContent {
+        self.get(node).align_content
     }
 }
 
@@ -1625,4 +1647,200 @@ fn column_wrap_is_unsupported_and_keeps_a_single_line() {
     assert_positions(ys(&tree, &items), &[0.0, 30.0, 60.0]);
     assert_positions(xs(&tree, &items), &[0.0, 0.0, 0.0]);
     assert_close(box_of(&tree, container).content.height(), 90.0);
+}
+
+// ---------------------------------------------------------------------------
+// `order` and `align-content`
+// ---------------------------------------------------------------------------
+
+#[test]
+fn order_sorts_items_and_keeps_equal_orders_stable() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let last = element(&mut document, container, "div");
+    let first = element(&mut document, container, "div");
+    let second = element(&mut document, container, "div");
+    let mut styles = MockStyles::new();
+    styles.set(container, NodeStyle::flex_row());
+    styles.set(
+        last,
+        NodeStyle::BLOCK
+            .with_width(10.0)
+            .with_height(10.0)
+            .with_order(2),
+    );
+    styles.set(
+        first,
+        NodeStyle::BLOCK
+            .with_width(10.0)
+            .with_height(10.0)
+            .with_order(0),
+    );
+    styles.set(
+        second,
+        NodeStyle::BLOCK
+            .with_width(10.0)
+            .with_height(10.0)
+            .with_order(0),
+    );
+    let tree = layout_with(&document, &styles, 800.0, 600.0);
+
+    // `first` and `second` share order 0, so document order breaks the tie.
+    assert_positions(xs(&tree, &[first, second, last]), &[0.0, 10.0, 20.0]);
+    // The children of the container follow the visual order, not document order.
+    let children: Vec<NodeId> = box_of(&tree, container)
+        .children
+        .iter()
+        .map(|index| tree.boxes[*index].node)
+        .collect();
+    assert_eq!(children, vec![first, second, last]);
+}
+
+#[test]
+fn order_is_applied_before_wrapping() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let first = element(&mut document, container, "div");
+    let second = element(&mut document, container, "div");
+    let mut styles = MockStyles::new();
+    styles.set(container, NodeStyle::flex_row().with_wrap());
+    // `first` has a larger order, so it wraps after `second`.
+    styles.set(
+        first,
+        NodeStyle::BLOCK
+            .with_width(60.0)
+            .with_height(10.0)
+            .with_order(1),
+    );
+    styles.set(
+        second,
+        NodeStyle::BLOCK
+            .with_width(60.0)
+            .with_height(10.0)
+            .with_order(0),
+    );
+    let tree = layout_with(&document, &styles, 100.0, 600.0);
+
+    assert_positions(ys(&tree, &[second, first]), &[0.0, 10.0]);
+    assert_close(box_of(&tree, container).content.height(), 20.0);
+}
+
+#[test]
+fn align_content_modes_position_two_lines_in_a_definite_container() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let items: Vec<NodeId> = (0..4)
+        .map(|_| element(&mut document, container, "div"))
+        .collect();
+    let mut styles = MockStyles::new();
+    for item in &items {
+        styles.set(*item, NodeStyle::BLOCK.with_width(50.0).with_height(10.0));
+    }
+    // Two 10px lines in a 100px container: 80px of cross space to distribute.
+    let cases = [
+        (AlignContent::FlexStart, [0.0, 0.0, 10.0, 10.0]),
+        (AlignContent::FlexEnd, [80.0, 80.0, 90.0, 90.0]),
+        (AlignContent::Center, [40.0, 40.0, 50.0, 50.0]),
+        (AlignContent::SpaceBetween, [0.0, 0.0, 90.0, 90.0]),
+        (AlignContent::SpaceAround, [20.0, 20.0, 70.0, 70.0]),
+        // `stretch` grows both lines to 50px each instead of moving them.
+        (AlignContent::Stretch, [0.0, 0.0, 50.0, 50.0]),
+    ];
+    for (align_content, expected) in cases {
+        styles.set(
+            container,
+            NodeStyle::flex_row()
+                .with_wrap()
+                .with_height(100.0)
+                .with_align_content(align_content),
+        );
+        let tree = layout_with(&document, &styles, 100.0, 600.0);
+        assert_positions(ys(&tree, &items), &expected);
+        assert_close(box_of(&tree, container).content.height(), 100.0);
+        for item in &items {
+            // A declared height is never stretched, even in `stretch` mode.
+            assert_close(box_of(&tree, *item).rect.height(), 10.0);
+        }
+    }
+}
+
+#[test]
+fn align_content_stretch_fills_the_container_height() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let items: Vec<NodeId> = (0..4)
+        .map(|_| element(&mut document, container, "div"))
+        .collect();
+    let mut styles = MockStyles::new();
+    // No declared heights: the lines start at zero height and stretch fills them.
+    for item in &items {
+        styles.set(*item, NodeStyle::BLOCK.with_width(50.0));
+    }
+    styles.set(
+        container,
+        NodeStyle::flex_row()
+            .with_wrap()
+            .with_height(100.0)
+            .with_align_content(AlignContent::Stretch),
+    );
+    let tree = layout_with(&document, &styles, 100.0, 600.0);
+
+    // 100px split over two lines: each line grows to 50px.
+    assert_positions(ys(&tree, &items), &[0.0, 0.0, 50.0, 50.0]);
+    for item in &items {
+        assert_close(box_of(&tree, *item).rect.height(), 50.0);
+    }
+    assert_close(box_of(&tree, container).content.height(), 100.0);
+}
+
+#[test]
+fn align_content_is_ignored_without_a_definite_height() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let items: Vec<NodeId> = (0..4)
+        .map(|_| element(&mut document, container, "div"))
+        .collect();
+    let mut styles = MockStyles::new();
+    for item in &items {
+        styles.set(*item, NodeStyle::BLOCK.with_width(50.0).with_height(10.0));
+    }
+    styles.set(
+        container,
+        // No height: the container is content-sized, so there is no space to distribute.
+        NodeStyle::flex_row()
+            .with_wrap()
+            .with_align_content(AlignContent::SpaceBetween),
+    );
+    let tree = layout_with(&document, &styles, 100.0, 600.0);
+
+    assert_positions(ys(&tree, &items), &[0.0, 0.0, 10.0, 10.0]);
+    assert_close(box_of(&tree, container).content.height(), 20.0);
+}
+
+#[test]
+fn align_content_is_ignored_for_a_single_line() {
+    let mut document = Document::new();
+    let body = body_element(&mut document);
+    let container = element(&mut document, body, "div");
+    let first = element(&mut document, container, "div");
+    let second = element(&mut document, container, "div");
+    let mut styles = MockStyles::new();
+    styles.set(first, NodeStyle::BLOCK.with_width(10.0).with_height(10.0));
+    styles.set(second, NodeStyle::BLOCK.with_width(10.0).with_height(10.0));
+    styles.set(
+        container,
+        NodeStyle::flex_row()
+            .with_height(100.0)
+            .with_align_content(AlignContent::Center),
+    );
+    let tree = layout_with(&document, &styles, 100.0, 600.0);
+
+    // A single line keeps the definite cross size and stays at the top.
+    assert_positions(ys(&tree, &[first, second]), &[0.0, 0.0]);
+    assert_close(box_of(&tree, container).content.height(), 100.0);
 }

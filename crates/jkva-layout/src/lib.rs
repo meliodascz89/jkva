@@ -84,8 +84,9 @@
 //! * **Flex flow.** An element with `display: flex` is a block-level flex container:
 //!   `flex-direction: row | column`, `justify-content` (`flex-start`, `flex-end`,
 //!   `center`, `space-between`, `space-around`), `align-items` (`stretch`,
-//!   `flex-start`, `center`, `flex-end`), `align-self`, one `gap` for both axes, and
-//!   `flex-wrap` / `flex-grow` / `flex-shrink` / `flex-basis` (see below). Its children
+//!   `flex-start`, `center`, `flex-end`), `align-self`, one `gap` for both axes,
+//!   `order`, `align-content`, and `flex-wrap` / `flex-grow` / `flex-shrink` /
+//!   `flex-basis` (see below). Its children
 //!   are flex items; an inline child is blockified and each bare text node child becomes
 //!   its own anonymous item. A row container breaks its items into lines when the next
 //!   outer base size plus the gap would not fit, each line is aligned and justified on
@@ -104,10 +105,11 @@
 //! 1. **Flex wrapping and growing are row-only.** `flex-wrap`, `flex-grow` and
 //!    `flex-shrink` are not applied to a column container, which stays single-line with
 //!    its previous sizing; `flex-basis` is ignored there too, because a column's main
-//!    axis is vertical and there is no vertical measure pass yet. `order` and
-//!    `align-content` are absent, so multiple lines stack from the top and a declared
-//!    container height overflows instead of distributing the lines. `auto` margins on an
-//!    item resolve to `0.0` instead of absorbing free space.
+//!    axis is vertical and there is no vertical measure pass yet. `align-content` only
+//!    applies to a row with several lines and a declared height; without a definite
+//!    container height the lines keep their content heights and stack from the top.
+//!    `order` is honoured for every flex container. `auto` margins on an item resolve to
+//!    `0.0` instead of absorbing free space.
 //! 2. **Flex sizes are approximations.** An item without a basis or declared width is as
 //!    wide as the longest line of its *own inline content*; block descendants do not
 //!    contribute, so an item whose content is only blocks collapses to its padding and
@@ -177,8 +179,8 @@ pub mod tree;
 pub use engine::layout;
 pub use geometry::{Point, Rect, Size};
 pub use style::{
-    AlignItems, Display, Edges, FlexDirection, FlexWrap, JustifyContent, Length, LengthEdges,
-    StyleSource,
+    AlignContent, AlignItems, Display, Edges, FlexDirection, FlexWrap, JustifyContent, Length,
+    LengthEdges, StyleSource, parse_order,
 };
 pub use text::{LINE_HEIGHT_FACTOR, TextMeasure, TextRun};
 pub use tree::{LayoutBox, LayoutTree, Viewport};
