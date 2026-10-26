@@ -20,7 +20,8 @@ The project is at **M0 (foundations)**. The repository, CI and the platform prob
 - [Performance baseline](performance.md)
 - [Web Platform Tests](wpt.md)
 - [Milestone status](status.md)
-- [Support](support.md) — how to compile and run the probe.
+- [Support](support.md)
+- [Gaming platform](gaming.md) — how to compile and run the probe.
 - [Tools](tools.md) — the two command-line programs for reference tests and WPT results.
 - [Contributing](contributing.md) — how to send a change.
 - [`briefing/DECISIONS.md`](https://github.com/meliodascz89/jkva/blob/main/briefing/DECISIONS.md) — the 24 ADRs behind all of it.

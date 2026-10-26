@@ -47,6 +47,16 @@ Co je hotové, co je ověřené a co se záměrně ještě nedělá. Každý ř�
 | Wrap, grow/shrink/basis, order, align-self | zatím ne | další krok M2 |
 | Grid, tabulky, floaty, obrázky, scroll, hit testing, vrstvy | zatím ne | M2 |
 
+## Herní platforma (ADR-026)
+
+| Položka | Stav | Důkaz |
+|---|---|---|
+| Hraní jako první třída 0.1 | rozhodnuto | ADR-026 v `briefing/DECISIONS.md` |
+| UDP s grantem (Tokio) | hotovo | `jkva-net::udp`: default deny, grant per origin i aplikace, revoke, limity velikosti a objemu |
+| GPU capability probe a frame-time benchmark | rozpracováno | delegováno; `jkva-gfx` |
+| WebGPU / WebGL, WASM, gamepad, pointer lock, audio | zatím ne | M4/M6 |
+| Výkonnostní cíle (p95 frame time, vstupní latence) | definováno | [Herní platforma](gaming.md) |
+
 ## Známé mezery (poctivý seznam)
 
 Nejsou schované; jsou to úkoly M2+.
@@ -54,6 +64,8 @@ Nejsou schované; jsou to úkoly M2+.
 - **Oficiální harness `wpt run`** potřebuje JS engine a WebDriver, tedy M4. Reftest runner je náhrada pro M1, s publikovanými limity.
 - **Layout je celodokumentový průchod.** Inkrementální je dnes jen damage.
 - **Cena kaskády** je 1,94 ms na fixture se 602 uzly a je v [Performance baseline](performance.md).
+
+- **Zatím žádné WebGPU/WebGL, WASM, gamepad, pointer lock ani nízko-latenční audio**; herní platforma má kontrakt (ADR-026) a první řez (UDP), ne renderovací API.
 
 ## Další
 

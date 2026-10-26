@@ -8,7 +8,7 @@
 
 JKva je raná fáze browser engine: vlastní DOM, stylovací systém, layout, rasterizér, kompozitor i event loop — žádná zděděná dvacet let stará C++ vrstva, žádný fork Chromia.
 
-**Stav: M2 — flexbox (podmnožina).** HTML se parsuje přes html5ever, CSS se parsuje a kaskáduje, blokový, inline a flex layout běží v `jkva-layout`, text se shapeuje a rasterizuje a Metal frame prezentuje. `examples/hello.html`, `cards.html` a `flex.html` se vykreslují v korpusu se zlatými obrázky. Flex umí row/column, `justify-content`, `align-items`, `align-self` a `gap`; wrap, grow/shrink a basis jsou další krok.
+**Stav: M2 — flexbox (podmnožina), herní platforma zahájena.** HTML se parsuje přes html5ever, CSS se parsuje a kaskáduje, blokový, inline a flex layout běží v `jkva-layout`, text se shapeuje a rasterizuje a Metal frame prezentuje. `examples/hello.html`, `cards.html` a `flex.html` se vykreslují v korpusu se zlatými obrázky. Flex umí row/column, `justify-content`, `align-items`, `align-self` a `gap`; wrap, grow/shrink a basis jsou další krok. Hraní je první třída 0.1 ([ADR-026](briefing/DECISIONS.md)): permission-gated UDP transport je v `jkva-net` (default deny, grant pro aplikaci i origin), GPU performance probe je další.
 
 ![The first page rendered by JKva](docs/images/first-page.png)
 
@@ -18,7 +18,7 @@ JKva je raná fáze browser engine: vlastní DOM, stylovací systém, layout, ra
 
 - **M0 hotové** — repozitář, CI, dokumentace EN+CS, 24 ADR, Metal walking skeleton, IPC kontrakty (`jkva-ipc`) a harness: reftest diff, corpus runner, WPT report, WPT reftesty, benchmarky.
 - **M1 hotové** — HTML → DOM → CSS kaskáda → blokový, inline a flex layout → shapeovaný text → Metal → PNG; tři zlaté stránky; seam pro damage; WPT reftest runner s publikovanými limity.
-- **M2 rozpracované** — flexbox: `row`/`column`, `justify-content`, `align-items`, `align-self`, `gap`. Další: wrap, `flex-grow`/`shrink`/`basis`.
+- **M2 rozpracované** — flexbox: `row`/`column`, `justify-content`, `align-items`, `align-self`, `gap`. Další: wrap, `flex-grow`/`shrink`/`basis`. Hraní: ADR-026, UDP s grantem hotové, GPU probe další.
 - 57 testovacích sad zelených, CI zelené, kaskáda ~1,94 ms na fixture se 602 uzly.
 
 Kontrolovatelný seznam s důkazy a známými mezerami je [`docs/src/cs/status.md`](docs/src/cs/status.md) ([anglicky](docs/src/en/status.md)).

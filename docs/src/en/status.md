@@ -47,6 +47,16 @@ What is done, what is verified, and what is deliberately not done yet. Every lin
 | Wrap, grow/shrink/basis, order, align-self | not yet | next M2 increment |
 | Grid, tables, floats, images, scroll, hit testing, layers | not yet | M2 |
 
+## Gaming platform (ADR-026)
+
+| Item | Status | Evidence |
+|---|---|---|
+| Gaming treated as a first-class 0.1 goal | decided | ADR-026 in `briefing/DECISIONS.md` |
+| Permission-gated UDP (Tokio) | done | `jkva-net::udp`: default deny, per-origin and per-application grants, revoke, datagram size and byte budget |
+| GPU capability probe and frame-time benchmark | in progress | delegated; `jkva-gfx` |
+| WebGPU / WebGL, WASM, gamepad, pointer lock, audio | not yet | M4/M6 |
+| Performance targets (p95 frame time, input latency) | defined | [Gaming platform](gaming.md) |
+
 ## Known gaps (honest list)
 
 These are not hidden; they are the M2+ work.
@@ -54,6 +64,8 @@ These are not hidden; they are the M2+ work.
 - **The official `wpt run` harness** needs a JS engine and WebDriver and arrives with M4. The reftest runner is the M1 substitute, with its caveats published.
 - **Layout is a full-document pass.** Only damage is incremental today.
 - **Cascade cost** is 1.94 ms on the 602-node fixture and documented in [Performance baseline](performance.md).
+
+- **No WebGPU/WebGL, WASM, gamepad, pointer lock or low-latency audio yet**; the gaming platform has its contract (ADR-026) and its first slice (UDP), not its rendering APIs.
 
 ## Next
 

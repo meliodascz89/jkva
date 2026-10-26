@@ -177,9 +177,23 @@ Tento dokument je výstup briefingu. Každé ADR shrnuje jednu oblast, uvádí r
 
 ## ADR-024 — Definice hotového a další krok
 
-**Rozhodnutí:** 0.1.0 se vydá, když: korpus projde vizuálním testem, benchmark matice je publikovaná, WPT cíl splněn, dokumentace EN+CS hotová, 24 h fuzz bez nálezu a bez úniků, release + demo + blog, žádná P0/P1 a schválená ADR. První krok je M0 walking skeleton; komunikace při milnících (Q97 = C) s povinným release a reportem u každého milníku.
+**Rozhodnutí:** 0.1.0 se vydá, když: korpus projde vizuálním testem, **herní benchmark splňuje cíle ADR-026**, benchmark matice je publikovaná, WPT cíl splněn, dokumentace EN+CS hotová, 24 h fuzz bez nálezu a bez úniků, release + demo + blog, žádná P0/P1 a schválená ADR. První krok je M0 walking skeleton; komunikace při milnících (Q97 = C) s povinným release a reportem u každého milníku.
 **Otázky:** Q94 = vše, Q95 = A, Q96 = A, Q97 = C
 **Důsledek:** release je binární stav, ne dojem. M0 začíná okamžitě po tomto dokumentu.
+
+## ADR-026 — Herní výkon jako první třída (0.1)
+
+**Rozhodnutí:** 0.1 není jen browser-grade engine; je to zároveň **nízko-latenční herní platforma**. Herní výkon se měří od M2, ne až v M7, a je součástí Definition of Done 0.1.
+- **Rozsah herní vrstvy:** WebGPU a WebGL, WASM/JS, gamepad, pointer lock, fullscreen, nízko-latenční audio, `requestAnimationFrame` s deterministickým pacingem, Performance API, WebRTC datové kanály a **UDP transport přes tokio**.
+- **Souhlas:** UDP a jakákoli syrová síť jsou dostupné jen po **výslovném grantu pro každou aplikaci a origin zvlášť**. Default deny; grant je viditelný, odvolatelný a vázaný na session. Žádné privilegované porty, žádné raw sockety, žádný trvalý listener bez aktivní hry.
+- **On-demand:** herní a síťové subsystémy se inicializují lazy při prvním grantu a při ukončení aplikace se zavřou. Nic neběží na pozadí „pro jistotu“.
+- **Bezpečnost:** síťový proces v sandboxu, kvóty na datagramy a rychlost, validace adres, oddělení od rendereru, audit každého nového kanálu (ADR-016).
+- **Měřitelné cíle:** frame time p95 ≤ 8 ms při 1080p na Apple Silicon v našem herním benchmarku; input-to-photon latence p95 ≤ 2 framy; stejné scénáře změřené proti Chrome a Safari; GPU timestamp queries a memory budget jako první-classmetry.
+- **Non-goals:** spouštět nativní CS2 nebo jiné Steam hry, cloud gaming/streaming, anti-cheat. „CS2-like“ znamená webovou hru s podobnou zátěží (WebGPU, WASM, UDP), ne spuštění nativního titulu.
+- **Rizika:** WebGPU ještě není hotové, UDP rozšiřuje attack surface, anti-cheat je mimo dosah, thermals na noteboocích. Odhad +3–4 měsíce nad rámec 36–48.
+
+**Otázky:** nové Q100–Q104 (herní cíl, UDP consent, GPU budget, benchmark, non-goals)
+**Důsledek:** každý milník od M2 musí kromě browserových testů doložit i herní metriku; bez ní není milník hotový.
 
 ## Rozpory mezi odpověďmi a jak jsou vyřešené
 
@@ -206,6 +220,8 @@ Tento dokument je výstup briefingu. Každé ADR shrnuje jednu oblast, uvádí r
 | M8 | dokumentace EN+CS, 0.1.0, demo, blog | 3 měsíce |
 
 Součet ≈ 38 měsíců + buffer = **36–48 měsíců**.
+
+**Herní větev (ADR-026):** M2 input a frame pacing; M3 GPU renderer a timestampy; M4 WASM/JS; M5 sandbox síťového procesu; M6 WebGPU, UDP s grantem, WebRTC a gamepad; M7 herní benchmarky proti Chrome/Safari. Odhad +3–4 měsíce.
 
 ## Otevřená rizika
 

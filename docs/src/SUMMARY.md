@@ -9,6 +9,7 @@
 - [Web Platform Tests](en/wpt.md)
 - [Milestone status](en/status.md)
 - [Support](en/support.md)
+- [Gaming platform](en/gaming.md)
 - [Tools](en/tools.md)
 - [Contributing](en/contributing.md)
 
@@ -21,5 +22,6 @@
 - [Web Platform Tests](cs/wpt.md)
 - [Stav milníků](cs/status.md)
 - [Podpora](cs/support.md)
+- [Herní platforma](cs/gaming.md)
 - [Nástroje](cs/tools.md)
 - [Přispívání](cs/contributing.md)
