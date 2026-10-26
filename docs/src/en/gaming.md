@@ -92,6 +92,12 @@ surface is deliberately small: buffers, textures, one render pass and draws.
 Pipelines, bind groups, samplers and compute come next. The crate is
 `jkva-gpu`; it is portable and covered by the Linux CI job.
 
+## Permission gate
+
+`jkva-api::permissions` is the policy layer between an application and a capability. A game requests `Udp` for one origin; the user grants **once** or **for the session**; an unknown request is denied and a denial overrides an earlier grant. Grants are keyed by origin **and** application, session grants are cleared when the application closes, and origins are normalised with plain HTTP accepted only for loopback development.
+
+The gate stores decisions only. It never opens a socket: `jkva-net` still refuses to bind without its own grant, so a bug in the prompt cannot silently enable networking.
+
 ## Status
 
 The design is in ADR-026. Done: the permission-gated UDP transport in `jkva-net` (Tokio, default deny, grant/revoke, quotas) and the fixed-timestep `FrameClock` in `jkva-core` (capped simulation steps, interpolation alpha, rate changes). In progress: the GPU capability probe and frame-time harness in `jkva-gfx`. Gamepad input is a typed message in `jkva-ipc` protocol v2.

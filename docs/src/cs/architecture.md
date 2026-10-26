@@ -7,6 +7,7 @@ JKva je Cargo workspace s jednou cratí na vrstvu. Závislosti ukazují jen dol�
 | `jkva-core` | identifikátory, areny, plánovací primitiva, diagnostiku |
 | `jkva-ipc` | verzované zprávy s délkou mezi browser, renderer, GPU a síťovým procesem |
 | `jkva-gpu` | backend-neutrální GPU command ABI (buffery, textury, passy, draw) s validací a verzovanými rámci |
+| `jkva-api` | browser API surface; permission gate pro herní schopnosti (ADR-026) |
 | `jkva-platform` | Metalové zařízení, QoS vláken, signposty, schránku, soubory |
 | `jkva-net` | síťové transporty; UDP s grantem pro hry (ADR-026) |
 | `jkva-dom` | HTML strom, eventy, shadow roots |

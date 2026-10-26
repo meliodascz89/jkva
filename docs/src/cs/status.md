@@ -55,6 +55,7 @@ Co je hotové, co je ověřené a co se záměrně ještě nedělá. Každý ř�
 |---|---|---|
 | Hraní jako první třída 0.1 | rozhodnuto | ADR-026 v `briefing/DECISIONS.md` |
 | UDP s grantem (Tokio) | hotovo | `jkva-net::udp`: default deny, grant per origin i aplikace, revoke, limity velikosti a objemu |
+| Permission gate | hotovo | `jkva-api::permissions`: grant once/session, per origin+aplikace, deny přebije, insecure originy odmítnuty |
 | Gamepad vstup přes IPC v2 | hotovo | `InputEvent::Gamepad` s tlačítky a osami |
 | GPU command ABI | hotovo | `jkva-gpu`: typované příkazy, limity zařízení, vyvážené passy, verzované rámce, 7 testů |
 | Frame pacing s pevným krokem | hotovo | `jkva-core::frame::FrameClock`: cap kroků, interpolační alpha, změna rate |

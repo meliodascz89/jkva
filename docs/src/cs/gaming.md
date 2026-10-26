@@ -84,6 +84,12 @@ Renderer nemluví s Metalem přímo. Staví typovaný `CommandList` (vytvoř buf
 
 To je šev, který sdílí Metal backend a budoucí WebGPU-style API. Aktuální plocha je záměrně malá: buffery, textury, jeden render pass a draw. Pipelines, bind groups, samplery a compute přijdou dál. Crate je `jkva-gpu`, je portable a běží v Linux CI.
 
+## Permission gate
+
+`jkva-api::permissions` je politická vrstva mezi aplikací a schopností. Hra požádá o `Udp` pro konkrétní origin; uživatel povolí **jednou** nebo **pro session**; neznámý požadavek je zamítnut a zamítnutí přebije dřívější grant. Granty jsou vázané na origin **a** aplikaci, session granty se při zavření aplikace mažou a originy se normalizují, přičemž plain HTTP je povoleno jen pro loopback vývoj.
+
+Gate ukládá jen rozhodnutí. Nikdy neotevírá socket: `jkva-net` pořád odmítne bind bez svého grantu, takže chyba v promptu nemůže tiše zapnout síť.
+
 ## Stav
 
 Design je v ADR-026. Hotové: permission-gated UDP transport v `jkva-net` (Tokio, default deny, grant/revoke, kvóty) a fixed-timestep `FrameClock` v `jkva-core` (cap na kroky, interpolační alpha, změna rate). Rozpracované: GPU capability probe a frame-time harness v `jkva-gfx`. Gamepad vstup je typovaná zpráva v `jkva-ipc` protokolu v2.
